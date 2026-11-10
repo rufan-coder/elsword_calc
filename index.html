@@ -1,0 +1,886 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>엘소드 스펙 계산기</title>
+<meta name="description" content="엘소드 스탯창 값으로 옵션별 DPS 상승률을 비교하고 크극·소켓 배분을 최적화하는 계산기">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@500;600;700&family=Noto+Sans+KR:wght@400;500;700&display=swap">
+<style>
+/* 레이아웃: 왼쪽에 입력(캐릭터 → 스탯창 → 버프), 오른쪽에 결과(실전 수치 → 옵션 비교)를 두는 2단 도구. 좁은 화면에서는 한 줄로 쌓인다. */
+:root {
+  --bg: #f3f4f9; --panel: #ffffff; --panel-2: #f8f9fd; --fg: #1a1d2b; --muted: #5d6479; --line: #dcdfeb;
+  --accent: #3550c8; --accent-soft: #e6eafc; --best: #b7791f; --best-soft: #fdf3dc; --warn: #b4441f; --bar: #8fa0ea; --bar-best: #d69e2e;
+  --font-display: "IBM Plex Sans KR", "Noto Sans KR", system-ui, sans-serif;
+  --font-body: "Noto Sans KR", system-ui, -apple-system, "Malgun Gothic", sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #12141d; --panel: #1b1e2a; --panel-2: #212534; --fg: #e9ebf4; --muted: #a0a7bd; --line: #30354a;
+  --accent: #8fa2ff; --accent-soft: #262d4d; --best: #f0c060; --best-soft: #3a3018; --warn: #ff9a76; --bar: #5c6fc4; --bar-best: #d8a53a; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #12141d; --panel: #1b1e2a; --panel-2: #212534; --fg: #e9ebf4; --muted: #a0a7bd; --line: #30354a;
+  --accent: #8fa2ff; --accent-soft: #262d4d; --best: #f0c060; --best-soft: #3a3018; --warn: #ff9a76; --bar: #5c6fc4; --bar-best: #d8a53a; color-scheme: dark }
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 14px; line-height: 1.55; }
+.wrap { max-width: 1120px; margin: 0 auto; padding-block: 24px 48px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+header.top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; margin-bottom: 18px; }
+h1 { font-family: var(--font-display); font-size: 24px; font-weight: 700; margin: 0; text-wrap: balance; }
+.ver { color: var(--muted); font-size: 12.5px; }
+.cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); gap: 20px; align-items: start; }
+.col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+@media (max-width: 860px) { .cols { grid-template-columns: minmax(0, 1fr); } }
+@media (min-width: 861px) { .col.results.stick { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 12px); } }
+
+section.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
+h2 { font-family: var(--font-display); font-size: 15px; font-weight: 600; margin: 0 0 12px; }
+h2 small { font-family: var(--font-body); font-weight: 400; color: var(--muted); font-size: 12px; margin-left: 6px; }
+.hint { color: var(--muted); font-size: 12.5px; margin: 0; }
+.note { background: var(--accent-soft); border-radius: 8px; padding: 9px 12px; font-size: 12.5px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
+.warn { color: var(--warn); font-size: 12.5px; }
+
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(148px, 1fr)); gap: 10px 12px; }
+.grid.two { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+.field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.field label { font-size: 12px; color: var(--muted); }
+.sub { font-size: 12px; font-weight: 500; color: var(--muted); letter-spacing: .02em; margin: 14px 0 8px; }
+.sub:first-of-type { margin-top: 0; }
+input, select, button { font: inherit; color: inherit; }
+input[type="number"], input[type="text"], select {
+  width: 100%; min-width: 0; padding: 7px 9px; border: 1px solid var(--line); border-radius: 7px; background: var(--panel-2); font-variant-numeric: tabular-nums; }
+input:focus-visible, select:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.unit { position: relative; }
+.unit input { padding-right: 26px; }
+.unit span { position: absolute; right: 9px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 12px; pointer-events: none; }
+button { cursor: pointer; border: 1px solid var(--line); background: var(--panel-2); border-radius: 7px; padding: 6px 11px; }
+button:hover { border-color: var(--accent); }
+button.ghost { border-color: transparent; background: transparent; color: var(--muted); padding: 6px 8px; }
+button.ghost:hover { color: var(--warn); }
+details > summary { cursor: pointer; font-family: var(--font-display); font-size: 15px; font-weight: 600; list-style-position: outside; margin-left: 16px; }
+details > summary small { font-family: var(--font-body); font-weight: 400; color: var(--muted); font-size: 12px; margin-left: 6px; }
+details[open] > summary { margin-bottom: 12px; }
+
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 10px; }
+.tile { background: var(--panel-2); border-radius: 8px; padding: 10px 12px; min-width: 0; }
+.tile .k { font-size: 12px; color: var(--muted); }
+.tile .v { font-family: var(--font-display); font-size: 21px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.25; }
+.tile .from { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+.opts { display: flex; flex-direction: column; gap: 8px; }
+.opt { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.2fr) minmax(0, .8fr) minmax(0, .8fr) auto; gap: 6px; align-items: center; }
+.opt-head { font-size: 11.5px; color: var(--muted); }
+.engs { display: flex; flex-direction: column; gap: 8px; }
+.eng { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); gap: 8px; }
+.presets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; align-items: center; }
+.presets span { font-size: 12px; color: var(--muted); }
+.presets button { font-size: 12.5px; padding: 4px 9px; }
+@media (max-width: 480px) {
+  .opt { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+  .opt-head { display: none; } .opt .o-kind { grid-column: 2 / 4; }
+  td.name { min-width: 104px; } td.name .hint { display: block; font-weight: 400; }
+  table.priced .barcell { display: none; }
+}
+
+.tabs { display: flex; gap: 4px; padding: 4px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+.tabs button { flex: 1 1 0; min-width: 0; border-color: transparent; background: transparent; color: var(--muted); padding: 7px 6px; font-family: var(--font-display); font-weight: 600; font-size: 13.5px; }
+.tabs button[aria-selected="true"] { background: var(--accent-soft); color: var(--accent); }
+.pane { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.pane[hidden] { display: none; }
+table.sk { margin-top: 14px; } table.sk td { border-top: 0; padding: 3px 8px 3px 0; } table.sk td:last-child, table.sk th:last-child { padding-right: 0; }
+table.sk td.lbl { white-space: nowrap; font-size: 13px; } table.sk .unit { min-width: 76px; }
+.out { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
+td.up { color: var(--best); font-weight: 700; } td.muted { color: var(--muted); }
+.verdict { font-size: 14.5px; margin: 0 0 12px; text-wrap: pretty; }
+.verdict b { color: var(--best); }
+.tbl-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+th { text-align: left; font-size: 11.5px; font-weight: 500; color: var(--muted); padding: 0 8px 6px 0; white-space: nowrap; }
+td { padding: 7px 8px 7px 0; border-top: 1px solid var(--line); vertical-align: middle; }
+td.num, th.num { text-align: right; white-space: nowrap; }
+td.name { font-weight: 500; }
+tr.best td.name, tr.best td.gain { color: var(--best); font-weight: 700; }
+.barcell { width: 38%; min-width: 80px; }
+.bar { height: 10px; border-radius: 5px; background: var(--bar); min-width: 2px; }
+tr.best .bar { background: var(--bar-best); }
+.rank { color: var(--muted); width: 1.6em; }
+.assume { margin: 12px 0 0; padding-left: 18px; color: var(--muted); font-size: 12.5px; }
+.assume li + li { margin-top: 2px; }
+footer { color: var(--muted); font-size: 12px; margin-top: 22px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1>엘소드 스펙 계산기</h1>
+    <span class="ver">실질 전투력 시트 ver.2.21.4 수치 기준</span>
+  </header>
+
+  <div class="cols">
+    <div class="col">
+      <div class="note" id="example-note">
+        <span>예시 값(트윈즈 피카로)이 들어 있어요. 내 스탯창 값으로 바꿔서 쓰세요.</span>
+        <button type="button" id="reset">예시로 되돌리기</button>
+      </div>
+
+      <section class="panel">
+        <h2>캐릭터</h2>
+        <div class="grid two">
+          <div class="field"><label for="cls">전직</label><select id="cls"></select></div>
+          <div class="field"><label for="field">던전 <span id="field-info"></span></label><select id="field"></select></div>
+        </div>
+        <p class="hint" id="cls-info" style="margin-top:10px"></p>
+        <p class="warn" id="cls-extra" hidden></p>
+      </section>
+
+      <section class="panel">
+        <h2>스탯창 값 <small>게임 스탯창에 보이는 숫자 그대로</small></h2>
+        <div class="sub">크리티컬 · 극대화</div>
+        <div class="grid">
+          <div class="field"><label for="crit">크리티컬 확률</label><div class="unit"><input type="number" id="crit" step="0.01" inputmode="decimal"><span>%</span></div></div>
+          <div class="field"><label for="crit_dmg">크리티컬 데미지</label><div class="unit"><input type="number" id="crit_dmg" step="0.01" inputmode="decimal"><span>%</span></div></div>
+          <div class="field"><label for="maxi">극대화</label><div class="unit"><input type="number" id="maxi" step="0.01" inputmode="decimal"><span>%</span></div></div>
+          <div class="field"><label for="A">공격력 (주 공격 타입)</label><input type="number" id="A" step="1" inputmode="numeric"></div>
+          <div class="field"><label for="A_max">극대화 범위 내 최댓값</label><input type="number" id="A_max" step="1" inputmode="numeric"></div>
+          <div class="field"><label for="W">무기 공격력</label><input type="number" id="W" step="1" inputmode="numeric"></div>
+        </div>
+        <div class="sub">데미지 증가</div>
+        <div class="grid">
+          <div class="field"><label for="boss">보스 데미지</label><div class="unit"><input type="number" id="boss" step="0.01" inputmode="decimal"><span>%</span></div></div>
+          <div class="field"><label for="all_skill">모든 스킬 데미지</label><div class="unit"><input type="number" id="all_skill" step="0.01" inputmode="decimal"><span>%</span></div></div>
+          <div class="field"><label for="cho">초월한 스킬 데미지</label><div class="unit"><input type="number" id="cho" step="0.01" inputmode="decimal"><span>%</span></div></div>
+          <div class="field"><label for="gang">강렬한 스킬 데미지</label><div class="unit"><input type="number" id="gang" step="0.01" inputmode="decimal"><span>%</span></div></div>
+          <div class="field"><label for="share_cho">초월 스킬 딜 점유율</label><div class="unit"><input type="number" id="share_cho" step="1" min="0" max="100" inputmode="decimal"><span>%</span></div></div>
+          <div class="field"><label for="polar">양극화</label><div class="unit"><input type="number" id="polar" step="0.01" inputmode="decimal"><span>%</span></div></div>
+          <div class="field"><label for="add">추가 피해</label><div class="unit"><input type="number" id="add" step="0.01" inputmode="decimal"><span>%</span></div></div>
+          <div class="field"><label for="hp_over">HP 50% 초과 적 데미지</label><div class="unit"><input type="number" id="hp_over" step="0.01" inputmode="decimal"><span>%</span></div></div>
+          <div class="field"><label for="hp_under">HP 50% 이하 적 데미지</label><div class="unit"><input type="number" id="hp_under" step="0.01" inputmode="decimal"><span>%</span></div></div>
+          <div class="field"><label for="hp100">HP 100% 이하 적 데미지</label><div class="unit"><input type="number" id="hp100" step="0.01" inputmode="decimal"><span>%</span></div></div>
+        </div>
+        <p class="hint" style="margin-top:10px">초월 점유율은 게임에서 보이는 딜 비중 기준이에요. 나머지는 강렬 스킬로 계산해요. 비교할 옵션과 상관없는 칸은 비워둬도 돼요.</p>
+      </section>
+
+      <section class="panel">
+        <details id="setup-details" open>
+          <summary>버프 세팅 <small>스탯창에 안 보이는 효과</small></summary>
+          <div class="grid">
+            <div class="field"><label for="town">마을 버프</label><select id="town"><option>엘 하우스(강화)</option><option>온천 버프</option><option>수색대원의 결의</option><option>공존의 축제 버프</option><option>미사용</option></select></div>
+            <div class="field"><label for="yellow">황색 아티팩트 (2세트 이상)</label><select id="yellow"><option value="1">착용</option><option value="0">미착용</option></select></div>
+            <div class="field"><label for="pants">하의 강화 수치</label><select id="pants"></select></div>
+            <div class="field"><label for="shoes">신발 강화 수치</label><select id="shoes"></select></div>
+          </div>
+          <div class="sub" style="margin-top:14px">금빛 각인석 <span style="font-weight:400">옵션과 적힌 수치만 고르면 가동률은 자동으로 반영해요</span></div>
+          <div class="engs">
+            <div class="eng"><select id="eng_kind_1" aria-label="금빛 각인석 1번째 줄 옵션"><option value="none">해당사항 없음</option><option value="patk">물리 공격력 증가</option><option value="matk">마법 공격력 증가</option><option value="skill">스킬 데미지 증가</option><option value="cd">크리티컬 데미지 증가</option><option value="boss">보스에게 입히는 피해 증가</option></select><div class="unit"><input type="number" id="eng_val_1" aria-label="금빛 각인석 1번째 줄 수치" step="0.5" min="0" inputmode="decimal"><span>%</span></div></div>
+            <div class="eng"><select id="eng_kind_2" aria-label="금빛 각인석 2번째 줄 옵션"><option value="none">해당사항 없음</option><option value="patk">물리 공격력 증가</option><option value="matk">마법 공격력 증가</option><option value="skill">스킬 데미지 증가</option><option value="cd">크리티컬 데미지 증가</option><option value="boss">보스에게 입히는 피해 증가</option></select><div class="unit"><input type="number" id="eng_val_2" aria-label="금빛 각인석 2번째 줄 수치" step="0.5" min="0" inputmode="decimal"><span>%</span></div></div>
+            <div class="eng"><select id="eng_kind_3" aria-label="금빛 각인석 3번째 줄 옵션"><option value="none">해당사항 없음</option><option value="patk">물리 공격력 증가</option><option value="matk">마법 공격력 증가</option><option value="skill">스킬 데미지 증가</option><option value="cd">크리티컬 데미지 증가</option><option value="boss">보스에게 입히는 피해 증가</option></select><div class="unit"><input type="number" id="eng_val_3" aria-label="금빛 각인석 3번째 줄 수치" step="0.5" min="0" inputmode="decimal"><span>%</span></div></div>
+          </div>
+          <div class="sub" style="margin-top:14px">비전의 원석 (격려)</div>
+          <div class="grid">
+            <div class="field"><label for="enc_cdr">격려 재사용 시간 감소 합계</label><div class="unit"><input type="number" id="enc_cdr" step="1" min="0" inputmode="decimal"><span>%</span></div></div>
+            <div class="field"><label for="enc_dur">격려 지속시간 증가 합계</label><div class="unit"><input type="number" id="enc_dur" step="1" min="0" inputmode="decimal"><span>%</span></div></div>
+          </div>
+          <p class="hint" id="setup-info" style="margin-top:12px"></p>
+          <p class="hint" style="margin-top:6px">파티 크뎀 버프 10%와 길드 스킬 보뎀 2.5%는 항상 들어가요. 각인석 수치가 0.5×무기 강화 수치 옵션이면 12강 기준 6을 넣으세요.</p>
+        </details>
+      </section>
+    </div>
+
+    <div class="col results">
+      <section class="panel">
+        <h2>실전 수치 <small>버프 · 직업 패시브 · 크리저항 반영</small></h2>
+        <div class="tiles" id="tiles"></div>
+      </section>
+
+      <div class="tabs" role="tablist" aria-label="계산 도구">
+        <button type="button" role="tab" id="tab-compare" aria-controls="pane-compare" aria-selected="true">옵션 비교</button>
+        <button type="button" role="tab" id="tab-ckb" aria-controls="pane-ckb" aria-selected="false">크극 최적화</button>
+        <button type="button" role="tab" id="tab-socket" aria-controls="pane-socket" aria-selected="false">소켓 최적화</button>
+      </div>
+
+      <div class="pane" id="pane-compare" role="tabpanel" aria-labelledby="tab-compare">
+      <section class="panel">
+        <h2>비교할 옵션</h2>
+        <div class="opts" id="opts">
+          <div class="opt opt-head"><span>이름</span><span>오르는 스탯</span><span>수치(%)</span><span>가격</span><span></span></div>
+        </div>
+        <div class="presets">
+          <span>추가</span>
+          <button type="button" data-preset="힘트마|boss|6">힘트마</button>
+          <button type="button" data-preset="지트마|cho|5">지트마</button>
+          <button type="button" data-preset="사냥석|boss|5">사냥석</button>
+          <button type="button" data-preset="기민석|both|4">기민석</button>
+          <button type="button" data-preset="크리 마법석|crit|6">크리 6%</button>
+          <button type="button" data-preset="극대 마법석|maxi|6">극대 6%</button>
+          <button type="button" data-preset="||">직접 입력</button>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>결과</h2>
+        <p class="verdict" id="verdict"></p>
+        <div class="tbl-wrap"><table id="result"></table></div>
+        <ul class="assume" id="assume"></ul>
+      </section>
+      </div>
+
+      <div class="pane" id="pane-ckb" role="tabpanel" aria-labelledby="tab-ckb" hidden>
+      <section class="panel">
+        <h2>크극 최적화 <small>크리 · 극대 · 보뎀 소켓을 어떻게 나누면 DPS가 최대인지</small></h2>
+        <div class="grid two">
+          <div class="field"><label for="ckb_boss">보뎀 기준</label><select id="ckb_boss"><option value="2.5">사냥석 기준 (한 칸 2.5%)</option><option value="3">아트마법석 극옵 기준 (한 칸 3%)</option></select></div>
+          <div class="field"><label for="ckb_min">크리티컬 최소 수치 (못 빼는 양)</label><div class="unit"><input type="number" id="ckb_min" step="1" min="0" inputmode="decimal"><span>%</span></div></div>
+        </div>
+        <div class="out" id="ckb-out"></div>
+      </section>
+      </div>
+
+      <div class="pane" id="pane-socket" role="tabpanel" aria-labelledby="tab-socket" hidden>
+      <section class="panel">
+        <h2>소켓 최적화 <small>다시 낄 칸을 어떤 마법석으로 채울지</small></h2>
+        <div class="grid two">
+          <div class="field"><label for="sk_neb">네블론 방어구 개수</label><select id="sk_neb"><option value="0">0개</option><option value="1">1개</option><option value="2">2개</option><option value="3">3개</option><option value="4">4개</option></select></div>
+          <div class="field"><label for="sk_slots">다시 배분할 소켓 칸 수</label><div class="unit"><input type="number" id="sk_slots" step="1" min="0" max="60" inputmode="numeric"><span>칸</span></div></div>
+          <div class="field"><label for="sk_boss_target">보뎀을 새로 끼울 때 기준</label><select id="sk_boss_target"><option value="boss">힘트마 기준</option><option value="boss2">사냥석 기준</option></select></div>
+        </div>
+        <p class="hint" id="sk-scope" style="margin-top:6px"></p>
+        <div class="tbl-wrap"><table class="sk"><thead><tr><th>마법석</th><th>한 칸 수치</th><th>지금 낀 칸 수</th></tr></thead><tbody><tr><td class="lbl">크리티컬</td><td><div class="unit"><input type="number" id="sk_per_crit" aria-label="크리티컬 한 칸 수치" step="0.1" min="0" inputmode="decimal"><span>%</span></div></td><td><div class="unit"><input type="number" id="sk_cnt_crit" aria-label="크리티컬 지금 낀 칸 수" step="1" min="0" inputmode="numeric"><span>칸</span></div></td></tr><tr><td class="lbl">극대화</td><td><div class="unit"><input type="number" id="sk_per_maxi" aria-label="극대화 한 칸 수치" step="0.1" min="0" inputmode="decimal"><span>%</span></div></td><td><div class="unit"><input type="number" id="sk_cnt_maxi" aria-label="극대화 지금 낀 칸 수" step="1" min="0" inputmode="numeric"><span>칸</span></div></td></tr><tr><td class="lbl">힘트마 보뎀</td><td><div class="unit"><input type="number" id="sk_per_boss" aria-label="힘트마 보뎀 한 칸 수치" step="0.1" min="0" inputmode="decimal"><span>%</span></div></td><td><div class="unit"><input type="number" id="sk_cnt_boss" aria-label="힘트마 보뎀 지금 낀 칸 수" step="1" min="0" inputmode="numeric"><span>칸</span></div></td></tr><tr><td class="lbl">사냥석 보뎀</td><td><div class="unit"><input type="number" id="sk_per_boss2" aria-label="사냥석 보뎀 한 칸 수치" step="0.1" min="0" inputmode="decimal"><span>%</span></div></td><td><div class="unit"><input type="number" id="sk_cnt_boss2" aria-label="사냥석 보뎀 지금 낀 칸 수" step="1" min="0" inputmode="numeric"><span>칸</span></div></td></tr><tr><td class="lbl">모스뎀</td><td><div class="unit"><input type="number" id="sk_per_all" aria-label="모스뎀 한 칸 수치" step="0.1" min="0" inputmode="decimal"><span>%</span></div></td><td><div class="unit"><input type="number" id="sk_cnt_all" aria-label="모스뎀 지금 낀 칸 수" step="1" min="0" inputmode="numeric"><span>칸</span></div></td></tr><tr><td class="lbl">초스뎀</td><td><div class="unit"><input type="number" id="sk_per_cho" aria-label="초스뎀 한 칸 수치" step="0.1" min="0" inputmode="decimal"><span>%</span></div></td><td><div class="unit"><input type="number" id="sk_cnt_cho" aria-label="초스뎀 지금 낀 칸 수" step="1" min="0" inputmode="numeric"><span>칸</span></div></td></tr><tr><td class="lbl">강렬스뎀</td><td><div class="unit"><input type="number" id="sk_per_gang" aria-label="강렬스뎀 한 칸 수치" step="0.1" min="0" inputmode="decimal"><span>%</span></div></td><td><div class="unit"><input type="number" id="sk_cnt_gang" aria-label="강렬스뎀 지금 낀 칸 수" step="1" min="0" inputmode="numeric"><span>칸</span></div></td></tr><tr><td class="lbl">유강강초</td><td><div class="unit"><input type="number" id="sk_per_both" aria-label="유강강초 한 칸 수치" step="0.1" min="0" inputmode="decimal"><span>%</span></div></td><td><div class="unit"><input type="number" id="sk_cnt_both" aria-label="유강강초 지금 낀 칸 수" step="1" min="0" inputmode="numeric"><span>칸</span></div></td></tr><tr><td class="lbl">빈 칸</td><td><span class="hint">아무것도 안 낀 칸</span></td><td><div class="unit"><input type="number" id="sk_cnt_empty" aria-label="빈 칸 수" step="1" min="0" inputmode="numeric"><span>칸</span></div></td></tr></tbody></table></div>
+        <p id="sk-count" style="margin:10px 0 0; font-weight:500"></p>
+        <p class="hint" style="margin-top:6px">"지금 낀 칸 수"의 합계가 다시 배분할 칸 수와 같아야 계산해요. 무기 소켓에 낀 건 2칸으로 세고, 아무것도 안 낀 칸은 "빈 칸"에 적으세요.</p>
+        <div class="out" id="sk-out"></div>
+      </section>
+      </div>
+    </div>
+  </div>
+
+  <footer>계산식 출처: 실질 전투력 디스코드 문서와 실투력 시트. 쿨타임 옵션, 동작 속도, 방어 무시는 계산에 넣지 않았어요. 수치는 패치로 바뀔 수 있어요.</footer>
+</div>
+
+<script id="calc">
+/* ===== 계산 (화면과 무관한 순수 함수) ===== */
+const CRIT_BANDS = [[0.40, 1.0], [0.68, 0.8], [0.86, 0.6], [1.00, 0.4]];
+const MAXI_BANDS = [[0.40, 1.0], [0.70, 0.75], [0.90, 0.5], [1.00, 0.25]];
+function applyBands(stat, bands) {
+  let out = 0, lo = 0;
+  for (const [hi, eff] of bands) {
+    const need = (hi - lo) / eff;
+    if (stat <= need) return out + stat * eff;
+    stat -= need; out = hi; lo = hi;
+  }
+  return 1;
+}
+function releaseBands(p, bands) {
+  let stat = 0, lo = 0;
+  for (const [hi, eff] of bands) {
+    if (p <= hi) return stat + (p - lo) / eff;
+    stat += (hi - lo) / eff; lo = hi;
+  }
+  return stat;
+}
+const critFromStat = s => applyBands(s, CRIT_BANDS), statFromCrit = p => releaseBands(p, CRIT_BANDS);
+const maxiFromStat = s => applyBands(s, MAXI_BANDS), statFromMaxi = p => releaseBands(p, MAXI_BANDS);
+const prod = xs => xs.reduce((a, x) => a * (1 + x), 1);
+const sum = xs => xs.reduce((a, x) => a + x, 0);
+const clamp01 = x => Math.min(1, Math.max(0, x));
+
+function critWithEncourage(a, adds, uptime) {
+  const A = a + sum(adds), B = a * 0.652;
+  if (A + B <= 1) return Math.max(0, A + B * uptime);
+  return 1 - (1 - clamp01(A)) * (1 - uptime);
+}
+function critFinal(s) {
+  const p0 = s.crit * prod(s.crit_mults || []);
+  const adds = s.crit_adds || [];
+  return clamp01(s.enc_uptime ? critWithEncourage(p0, adds, s.enc_uptime) : p0 + sum(adds));
+}
+function maxiFinal(s) { return Math.min(1, s.maxi * prod(s.maxi_mults || []) + sum(s.maxi_adds || [])); }
+function statAtkPct(A, Amax, W) { return 2 * (Amax - A) / (1.1 * W) - 1; }
+function maximizeMultiplier(M, A, W, Ps) { return 1 + 0.55 * M * W * (1 + Ps) / A; }
+function preShares(sg, sc, gang, cho) {
+  const g = sg / (1 + gang), c = sc / (1 + cho);
+  return g + c > 0 ? [g / (g + c), c / (g + c)] : [0, 1];
+}
+function hpMultiplier(o, u, c3o, c3u) { return 0.5 * (1 + o) * prod(c3o || []) + 0.5 * (1 + u) * prod(c3u || []); }
+const POLAR_CAP = 0.60;
+const has = (s, k) => typeof s[k] === "number" && isFinite(s[k]);
+const hasCrit = s => has(s, "crit") && has(s, "crit_dmg");
+const hasMaxi = s => has(s, "maxi") && has(s, "A") && has(s, "W") && has(s, "A_max") && s.A > 0 && s.W > 0;
+
+function dpsIndex(s) {
+  let x = 1;
+  for (const k of ["atk_pct", "all_skill", "boss", "add", "hp100"]) x *= 1 + (s[k] || 0);
+  x *= 1 + Math.min(s.polar || 0, POLAR_CAP);
+  if (has(s, "cho") || has(s, "gang")) {
+    const g = s.gang || 0, c = s.cho || 0;
+    const [Rg, Rc] = preShares(s.share_gang || 0, s.share_cho == null ? 1 : s.share_cho,
+                               s._base_gang == null ? g : s._base_gang, s._base_cho == null ? c : s._base_cho);
+    x *= Rc * (1 + c) + Rg * (1 + g);
+  }
+  if (hasCrit(s)) { const p = critFinal(s); x *= 1 - p + p * s.crit_dmg; }
+  if (hasMaxi(s)) x *= maximizeMultiplier(maxiFinal(s), s.A, s.W, statAtkPct(s.A, s.A_max, s.W));
+  x *= hpMultiplier(s.hp_over || 0, s.hp_under || 0, s.hp3_over, s.hp3_under);
+  return x;
+}
+function applyOption(base, delta) {
+  const s = Object.assign({}, base);
+  if (s._base_gang == null) s._base_gang = base.gang || 0;
+  if (s._base_cho == null) s._base_cho = base.cho || 0;
+  for (const [k, v] of Object.entries(delta)) {
+    if (k === "crit_stat") s.crit = critFromStat(statFromCrit(s.crit) + v);
+    else if (k === "maxi_stat") s.maxi = maxiFromStat(statFromMaxi(s.maxi) + v);
+    else s[k] = (s[k] || 0) + v;
+  }
+  return s;
+}
+
+/* 전직|공격형태|티어|크확(스텟%,곱연,최종합)|크뎀(스텟%,크리 시 최종뎀,기본크뎀 곱연)|극대(스텟%,곱연,최종합)|보뎀|강배,역강배 구간 최종뎀 */
+const CLASS_RAW = `
+나이트 엠퍼러|물리|2|0,20,0|8,0,0|0,20,0|20|1,1
+룬 마스터|마법|1|0,15,0|20,0,0|0,0,15|0|1,1
+임모탈|물리|1|0,0,20|20,0,0|23,0,0|20|1,1
+제네시스|마법|1|0,0,15|20,0,0|0,0,15|0|1,1
+에테르 세이지|마법|2|0,0,15|0,0,0|0,0,15|0|1,1
+오즈 소서러|마법|1|0,0,15|0,0,0|0,0,15|0|1,1
+메타모르피|물리|1|0,0,15|17,0,0|0,0,15|0|1,1
+로드 아조트|물리|2|0,0,15|0,0,0|0,0,15|0|1,1
+아네모스|물리|1|20,0,0|50,0,0|20,0,0|0|1,1
+데이브레이커|마법|2|0,0,15|30,15,0|0,0,15|0|1,1
+트와일라잇|물리|1|0,0,15|30,0,0|0,0,15|0|1,1
+프로피티스|마법|2|0,0,15|48,0,0|0,0,15|20|1,1
+퓨리어스 블레이드|물리|1|0,0,15|20,0,0|0,0,15|0|1,1
+레이지 하츠|마법|2|0,20,0|0,0,10|0,20,0|0|1,1.2
+노바 임퍼레이터|마법|1|0,20,0|10,0,0|0,20,0|0|1,1
+레버넌트|물리|2|0,0,15|20,0,0|0,0,15|20|1,1.084
+코드:얼티메이트|마법|1|20,0,0|15,0,5|0,23,0|15|1,1.082
+코드:에센시아|물리|1|0,0,15|0,0,0|0,23,0|0|1,1
+코드:사리엘|마법|1|20,0,0|15,12,0|0,23,0|20|1,1
+코드:안티테제|물리|1|0,0,15|20,0,0|0,23,0|12|1,1
+코멧 크루세이더|물리|2|0,0,15|10,0,0|0,0,15|0|1,1
+페이탈 팬텀|마법|2|10,0,15|0,0,0|0,0,15|0|1,1
+센츄리온|마법|2|0,0,15|0,0,0|0,0,15|12|1,1
+디우스 아에르|물리|2|0,0,15|0,0,0|0,0,15|0|1,1
+비천|물리|2|0,23,0|15,0,0|0,23,0|0|1,1
+범황|마법|1|0,23,0|20,0,0|0,23,0|0|1,1
+대라|물리|1|0,23,0|20,0,0|0,23,0|0|1,1.15
+일천|마법|2|0,23,0|25,0,0|0,23,0|0|1,1
+엠파이어 소드|물리|2|0,15,0|16,0,0|0,15,0|15|1,1
+플레임 로드|마법|1|0,0,20|15,0,0|0,0,12|0|1,1
+블러디 퀸|물리|1|0,0,18|0,20,20.75|0,0,20|0|1,1
+아드레스티아|마법|1|0,0,15|20,0,0|0,0,15|3|1,1.1
+둠 브링어|마법|1|0,20,0|12,0,30|0,20,0|0|1,1
+도미네이터|물리|1|0,21,0|71.5,0,0|0,0,15|0|1,1
+매드 패러독스|마법|1|0,0,15|15,0,15|0,0,15|0|1,1
+오버마인드|물리|2|0,20,0|10,0,0|0,20,0|0|1,1
+카타스트로피|물리|2|38,0,0|23,0,23|15,0,0|0|1,1
+이노센트|마법|2|38,0,0|25,12,23|15,0,0|0|1,1
+디앙겔리온|물리|1|38,0,0|12,0,23|0,0,15|0|1,1
+데메르시오|마법|2|23,0,15|0,0,23|0,0,15|0|1,1
+템페스트 버스터|물리|2|7,0,0|10,0,10|7,0,0|0|1,1
+블랙 매서커|물리|2|0,24,0|0,12,10|0,24,0|0|1,1.06
+미네르바|마법|2|0,0,15|0,0,27.05|0,0,15|0|1,1
+프라임 오퍼레이터|마법|2|0,0,15|20,0,10|0,0,15|10|1,1
+리히터|물리|1|0,23,0|20,0,20|0,23,0|10|1,1
+블루헨|마법|2|0,23,0|25,0,0|0,23,0|0|1,1
+헤르셔|마법|1|0,23,0|0,0,40.8|0,23,0|0|1,1
+비고트|물리|2|0,23,0|24,0,0|0,23,0|0|1,1
+이터니티 위너|물리|1|0,0,15|15,0,20|0,0,15|0|1,1
+라디언트 소울|마법|2|20,0,0|20,0,0|20,0,0|20|1,1
+니샤 라비린스|물리|1|0,0,15|15,0,0|0,0,15|0|1,1
+트윈즈 피카로|마법|1|0,0,15|20,0,0|0,0,15|0|1,1
+리버레이터|물리|1|20,0,0|20,12,0|20,0,0|8|1,1
+셀레스티아|마법|1|0,20,0|20,4,0|0,20,0|0|1,1
+닉스 피에타|물리|2|0,0,15|25,0,0|0,0,15|0|1,1
+모르페우스|마법|1|0,0,15|15,0,0|0,0,15|15|1,1
+젬블리스|물리|1|0,0,15|20,0,0|0,0,15|0|1,1
+애버리스|물리|2|5,0,15|25,0,0|5,0,15|15|1,1
+아클리스|마법|1|0,0,15|26,0,0|0,0,15|0|1,1
+미스치프|마법|1|0,0,15|24,12.5,0|0,0,15|12.5|1,1`;
+const CLASS = {};
+for (const line of CLASS_RAW.trim().split("\n")) {
+  const [name, type, tier, cr, cd, mx, boss, hp] = line.split("|");
+  const f = t => t.split(",").map(x => parseFloat(x) / 100);
+  const [cs, cm, ca] = f(cr), [ds, df, db] = f(cd), [ms, mm, ma] = f(mx);
+  const [ho, hu] = hp.split(",").map(parseFloat);
+  CLASS[name] = { name, type, tier: +tier, crit_s: cs, crit_m: cm, crit_a: ca, cd_s: ds, cd_final: df, cd_base: db,
+    maxi_s: ms, maxi_m: mm, maxi_a: ma, boss: parseFloat(boss) / 100, hp_over: ho - 1, hp_under: hu - 1,
+    gang: name === "임모탈" ? 0.25 : 0, cho: name === "임모탈" ? 0.25 : 0 };
+}
+const EXTRA = {
+  "임모탈": "강렬·초월 스뎀 +25% 패시브가 반영돼 있어요. 선택 스킬 팬텀 소드(크리 23%, 크뎀 곱연 10%)는 빠져 있어요.",
+  "룬 마스터": "크리티컬 소드(기본 크뎀 170% 또는 180%, 노첸은 크확 곱연 10%)는 빠져 있어요.",
+  "메타모르피": "HP 구간별 물공 +20% 효과는 본인 스펙에 따라 달라서 빠져 있어요.",
+  "블러디 퀸": "갈증(강배 구간 크뎀 +15%, 역강배 구간 +25%)은 본인 스펙에 따라 달라서 빠져 있어요.",
+  "로드 아조트": "선택 스킬 미스틱 플라스크(크뎀 곱연 5%)는 빠져 있어요.",
+  "카타스트로피": "선택 스킬 오블리비언(크리 시 최종뎀 8%)은 빠져 있어요.",
+  "템페스트 버스터": "선택 스킬 신경집중(크리·극대 최대 21%)은 빠져 있어요.",
+  "코드:안티테제": "로깅 보뎀은 파티원 6명 기준(12%)으로 넣었어요.",
+  "미스치프": "크뎀 24%와 보뎀·크리 시 최종뎀 12.5%는 스택 최대 기준이에요.",
+};
+/* 던전: [마계 디버프, 크리저항] */
+const FIELDS = {
+  "네블론 레이드": [0.95, 0.30], "오케스트라 홀": [0.95, 0.30], "도전 프뤼나움 레이드": [0.90, 0.40],
+  "도전 바니미르 레이드 2던": [0.90, 0.35], "심연 레이드 4던": [0.90, 0.30], "심연 레이드 2·3던": [0.90, 0.20],
+  "심연 레이드 1던": [0.90, 0.10], "일반 프뤼나움 레이드": [0.80, 0], "일반 바니미르 레이드": [0.50, 0],
+  "크리저항 없는 던전": [0, 0],
+};
+
+/* 스탯창 값 -> 실전 값. setup: town_crit, town_maxi, crit_mults[], maxi_mults[], cd_base_mults[], guild_boss, enc_uptime */
+function resolve(win, cls, resist, st) {
+  const c = cls ? CLASS[cls] : { crit_s: 0, crit_m: 0, crit_a: 0, cd_s: 0, cd_final: 0, cd_base: 0, maxi_s: 0, maxi_m: 0, maxi_a: 0, boss: 0, hp_over: 0, hp_under: 0, gang: 0, cho: 0 };
+  const s = Object.assign({}, win);
+  if (has(s, "crit")) {
+    s.crit = critFromStat(statFromCrit(s.crit) + st.town_crit + c.crit_s);
+    s.crit_mults = st.crit_mults.concat([c.crit_m]);
+    s.crit_adds = [c.crit_a, -resist];
+    s.enc_uptime = st.enc_uptime;
+  }
+  if (has(s, "crit_dmg")) s.crit_dmg = (s.crit_dmg + c.cd_s + 1.5 * (prod(st.cd_base_mults.concat([c.cd_base])) - 1)) * (1 + c.cd_final);
+  if (has(s, "maxi")) {
+    s.maxi = maxiFromStat(statFromMaxi(s.maxi) + st.town_maxi + c.maxi_s);
+    s.maxi_mults = st.maxi_mults.concat([c.maxi_m]);
+    s.maxi_adds = [c.maxi_a];
+  }
+  if (has(s, "boss")) s.boss = s.boss + st.guild_boss + c.boss;
+  for (const k of ["gang", "cho"]) if (has(s, k)) s[k] += c[k];
+  s.hp3_over = [c.hp_over]; s.hp3_under = [c.hp_under];
+  return s;
+}
+/* 옵션 종류: 라벨, 변화량 만들기, 필요한 스탯 묶음 */
+const KINDS = {
+  boss: ["보스 데미지", v => ({ boss: v }), "boss"],
+  cho: ["초월한 스킬 데미지", v => ({ cho: v }), "skill"],
+  gang: ["강렬한 스킬 데미지", v => ({ gang: v }), "skill"],
+  both: ["강렬 + 초월 스킬 데미지", v => ({ gang: v, cho: v }), "skill"],
+  all_skill: ["모든 스킬 데미지", v => ({ all_skill: v }), "all_skill"],
+  crit: ["크리티컬 확률", v => ({ crit_stat: v }), "crit"],
+  maxi: ["극대화", v => ({ maxi_stat: v }), "maxi"],
+  crit_dmg: ["크리티컬 데미지", v => ({ crit_dmg: v }), "crit"],
+  polar: ["양극화", v => ({ polar: v }), "polar"],
+  add: ["추가 피해", v => ({ add: v }), "add"],
+  hp_over: ["HP 50% 초과 적 데미지", v => ({ hp_over: v }), "hp_over"],
+  hp_under: ["HP 50% 이하 적 데미지", v => ({ hp_under: v }), "hp_under"],
+  hp100: ["HP 100% 이하 적 데미지", v => ({ hp100: v }), "hp100"],
+};
+function missingFor(need, s) {
+  if (need === "crit") return hasCrit(s) ? null : "크리티컬 확률과 크리티컬 데미지";
+  if (need === "maxi") return hasMaxi(s) ? null : "극대화, 공격력, 최댓값, 무기 공격력";
+  if (need === "skill") return (has(s, "cho") || has(s, "gang")) ? null : "초월·강렬 스킬 데미지";
+  return has(s, need) ? null : KINDS[need] ? KINDS[need][0] : need;
+}
+function compare(base, options) {
+  const b = dpsIndex(base);
+  return options.map(o => {
+    const kind = KINDS[o.kind];
+    const miss = missingFor(kind[2], base);
+    const gain = miss ? null : dpsIndex(applyOption(base, kind[1](o.value))) / b - 1;
+    return Object.assign({}, o, { gain, miss, per: gain != null && o.price > 0 ? gain / o.price : null });
+  });
+}
+/* 마을 버프: [크리티컬, 극대화] 스텟 합연산 */
+const TOWN = { "엘 하우스(강화)": [0.05, 0.05], "온천 버프": [0.05, 0.05], "수색대원의 결의": [0, 0], "공존의 축제 버프": [0, 0], "미사용": [0, 0] };
+/* 격려: 기본 쿨 180초·지속 24초, 응원 성장 쿨감 1/3, 끈기 성장 지속 +50%, 비전의 원석 수치는 합연산 */
+function encourage(stoneCdr, stoneDur) {
+  const cool = 180 * Math.max(0.01, 1 - (1 / 3 + stoneCdr)), dur = 24 * (1 + 0.5 + stoneDur);
+  return { cool, dur, uptime: Math.min(1, dur / cool) };
+}
+/* 금빛 각인석: 수치 x 적빛 85% x 쪽빛 100% x 금빛 25%. 같은 옵션이 여러 줄이면 평균 (시트와 동일) */
+const ENGRAVE_UPTIME = 0.85 * 1.0 * 0.25;
+function engrave(rows) {
+  const out = {};
+  for (const k of ["patk", "matk", "skill", "cd", "boss"]) {
+    const xs = rows.filter(r => r.kind === k).map(r => (r.value || 0) * ENGRAVE_UPTIME);
+    out[k] = xs.length ? sum(xs) / xs.length : 0;
+  }
+  return out;
+}
+/* ===== 최적화 ===== */
+function critFactor(win, cls, resist, st, critWindow) {
+  const s = resolve({ crit: critWindow, crit_dmg: win.crit_dmg }, cls, resist, st);
+  const p = critFinal(s); return 1 - p + p * s.crit_dmg;
+}
+function maxiFactor(win, cls, resist, st, maxiWindow) {
+  const s = resolve({ maxi: maxiWindow, A: win.A, W: win.W, A_max: win.A_max }, cls, resist, st);
+  return maximizeMultiplier(maxiFinal(s), s.A, s.W, statAtkPct(s.A, s.A_max, s.W));
+}
+const classOf = cls => (cls && CLASS[cls]) || { crit_s: 0, maxi_s: 0, boss: 0, gang: 0, cho: 0 };
+/* 크극 최적화: 크리·극대 소켓 6% = 보뎀 소켓 bossPer 로 맞바꾸며 0.1% 단위로 전수 탐색. 수치는 소켓(점감 전) 기준 */
+function optimizeCkb(win, cls, resist, st, opt) {
+  const c = classOf(cls), r = 0.06 / opt.bossPer, step = 0.001;
+  const sc0 = statFromCrit(win.crit), sm0 = statFromMaxi(win.maxi), b0 = win.boss;
+  const pool = sc0 + sm0 + r * b0, bFix = st.guild_boss + c.boss, bMin = Math.min(b0, 0.6);
+  const iMin = Math.max(0, Math.ceil(Math.min(sc0, opt.minCrit || 0) / step - 1e-9));
+  const iMax = Math.max(iMin, Math.ceil((1.4 - st.town_crit - c.crit_s) / step));
+  const jMax = Math.max(0, Math.ceil((1.6 - st.town_maxi - c.maxi_s) / step));
+  const FC = new Float64Array(iMax + 1), FM = new Float64Array(jMax + 1);
+  for (let i = iMin; i <= iMax; i++) FC[i] = critFactor(win, cls, resist, st, critFromStat(i * step));
+  for (let j = 0; j <= jMax; j++) FM[j] = maxiFactor(win, cls, resist, st, maxiFromStat(j * step));
+  const cur = critFactor(win, cls, resist, st, win.crit) * maxiFactor(win, cls, resist, st, win.maxi) * (1 + bFix + b0);
+  let best = { v: cur * (1 + 1e-9), sc: sc0, sm: sm0, b: b0 };
+  for (let i = iMin; i <= iMax; i++) {
+    const rem = pool - i * step, fc = FC[i];
+    for (let j = 0; j <= jMax; j++) {
+      const b = (rem - j * step) / r;
+      if (b < bMin) break;
+      const v = fc * FM[j] * (1 + bFix + b);
+      if (v > best.v) best = { v, sc: i * step, sm: j * step, b };
+    }
+  }
+  const crit = critFromStat(best.sc), maxi = maxiFromStat(best.sm);
+  const after = resolve(Object.assign({}, win, { crit, maxi, boss: best.b }), cls, resist, st);
+  return { crit, maxi, boss: best.b, dCrit: best.sc - sc0, dMaxi: best.sm - sm0, dBoss: best.b - b0,
+    gain: Math.max(0, best.v / cur - 1), critFinal: critFinal(after), maxiFinal: maxiFinal(after) };
+}
+/* 소켓 최적화: 고른 칸의 수치(cur)를 빼고 N칸을 7종 마법석으로 다시 채우는 최적 배분 (전수 DP).
+   per: 한 칸 수치 {crit,maxi,boss,all,cho,gang,both}, cur: 뺄 수치 합 {crit,maxi,boss,all,cho,gang} */
+function optimizeSockets(win, cls, resist, st, slots, per, cur) {
+  const c = classOf(cls), N = Math.max(0, Math.min(60, Math.floor(slots || 0)));
+  const p = k => Math.max(0, per[k] || 0), q = k => Math.max(0, cur[k] || 0);
+  const ok = { crit: hasCrit(win), maxi: hasMaxi(win), boss: has(win, "boss"), all: has(win, "all_skill"), skill: has(win, "cho") || has(win, "gang") };
+  const bFix = st.guild_boss + c.boss;
+  const sc = ok.crit ? Math.max(0, statFromCrit(win.crit) - q("crit")) : 0, sm = ok.maxi ? Math.max(0, statFromMaxi(win.maxi) - q("maxi")) : 0;
+  const b = Math.max(0, (win.boss || 0) - q("boss")), a = Math.max(0, (win.all_skill || 0) - q("all"));
+  const gR = (win.gang || 0) + c.gang, cR = (win.cho || 0) + c.cho;
+  const [Rg, Rc] = preShares(win.share_gang || 0, win.share_cho == null ? 1 : win.share_cho, gR, cR);
+  const g0 = Math.max(0, gR - q("gang")), c0 = Math.max(0, cR - q("cho"));
+  const skillPick = [["cho", Rc * p("cho")], ["gang", Rg * p("gang")], ["both", (Rc + Rg) * p("both")]].sort((x, y) => y[1] - x[1])[0];
+  // 보뎀 마법석 종류: 수치 높은 것부터 limit 칸까지 사용 (지금 낀 더 좋은 마법석은 그대로 두는 경우)
+  const tiers = (per.bossTiers || [{ key: "boss", value: p("boss"), limit: Infinity }]).filter(t => t.value > 0 && t.limit > 0).sort((x, y) => y.value - x.value);
+  const bossCap = tiers.reduce((s, t) => s + t.limit, 0);
+  const bossSplit = n => { const out = {}; let add = 0; for (const t of tiers) { const k = Math.min(n, t.limit); out[t.key] = k; add += k * t.value; n -= k; } return { out, add }; };
+  const groups = [
+    { key: "crit", on: ok.crit && p("crit") > 0, f: n => critFactor(win, cls, resist, st, critFromStat(sc + n * p("crit"))), cur: () => critFactor(win, cls, resist, st, win.crit) },
+    { key: "maxi", on: ok.maxi && p("maxi") > 0, f: n => maxiFactor(win, cls, resist, st, maxiFromStat(sm + n * p("maxi"))), cur: () => maxiFactor(win, cls, resist, st, win.maxi) },
+    { key: "boss", on: ok.boss && tiers.length > 0, cap: bossCap, f: n => 1 + bFix + b + bossSplit(n).add, cur: () => 1 + bFix + win.boss },
+    { key: "all", on: ok.all && p("all") > 0, f: n => 1 + a + n * p("all"), cur: () => 1 + win.all_skill },
+    { key: "skill", on: ok.skill && skillPick[1] > 0, f: n => Rc * (1 + c0) + Rg * (1 + g0) + n * skillPick[1], cur: () => Rc * (1 + cR) + Rg * (1 + gR) },
+  ];
+  const have = { crit: ok.crit, maxi: ok.maxi, boss: ok.boss, all: ok.all, skill: ok.skill };
+  let curV = 1;
+  for (const g of groups) if (have[g.key]) curV *= g.cur();
+  // dp[n] = n칸을 지금까지의 그룹에 나눴을 때 최대 곱
+  let dp = new Float64Array(N + 1).fill(-1); dp[0] = 1;
+  const choice = [];
+  for (const g of groups) {
+    const F = new Float64Array(N + 1).fill(-1);
+    for (let n = 0; n <= N; n++) { if (n > 0 && (!g.on || n > (g.cap == null ? Infinity : g.cap))) break; F[n] = have[g.key] ? g.f(n) : 1; }
+    const nd = new Float64Array(N + 1).fill(-1), ch = new Int32Array(N + 1);
+    for (let n = 0; n <= N; n++) for (let k = 0; k <= n; k++) {
+      if (F[k] < 0 || dp[n - k] < 0) continue;
+      const v = dp[n - k] * F[k];
+      if (v > nd[n]) { nd[n] = v; ch[n] = k; }
+    }
+    dp = nd; choice.push(ch);
+  }
+  let used = N; while (used > 0 && dp[used] < 0) used--;
+  const counts = { crit: 0, maxi: 0, boss: 0, all: 0, cho: 0, gang: 0, both: 0 };
+  for (const t of per.bossTiers || []) counts[t.key] = 0;
+  let n = used, bossAdd = 0;
+  for (let gi = groups.length - 1; gi >= 0; gi--) {
+    const k = choice[gi][n]; n -= k;
+    if (groups[gi].key === "skill") counts[skillPick[0]] = k;
+    else if (groups[gi].key === "boss") { const s = bossSplit(k); Object.assign(counts, s.out); bossAdd = s.add; }
+    else counts[groups[gi].key] = k;
+  }
+  const after = {
+    crit: ok.crit ? critFromStat(sc + counts.crit * p("crit")) : null, maxi: ok.maxi ? maxiFromStat(sm + counts.maxi * p("maxi")) : null,
+    boss: ok.boss ? b + bossAdd : null, all_skill: ok.all ? a + counts.all * p("all") : null,
+    cho: ok.skill ? c0 - c.cho + counts.cho * p("cho") + counts.both * p("both") : null,
+    gang: ok.skill ? g0 - c.gang + counts.gang * p("gang") + counts.both * p("both") : null,
+  };
+  return { slots: N, used, counts, after, gain: dp[used] / curV - 1 };
+}
+if (typeof module !== "undefined") module.exports = { optimizeCkb, optimizeSockets, critFactor, maxiFactor, resolve, compare, critFinal, maxiFinal, dpsIndex, CLASS, FIELDS, critFromStat, statFromCrit, TOWN, encourage, engrave };
+</script>
+
+<script>
+/* ===== 화면 ===== */
+(function () {
+  const $ = id => document.getElementById(id);
+  const STAT_IDS = ["crit", "crit_dmg", "maxi", "A", "A_max", "W", "boss", "all_skill", "cho", "gang", "share_cho", "polar", "add", "hp_over", "hp_under", "hp100"];
+  const SETUP_IDS = ["town", "yellow", "pants", "shoes", "eng_kind_1", "eng_val_1", "eng_kind_2", "eng_val_2", "eng_kind_3", "eng_val_3", "enc_cdr", "enc_dur"];
+  const TOOL_IDS = ["ckb_boss", "ckb_min", "sk_neb", "sk_slots", "sk_boss_target", "sk_per_crit", "sk_per_maxi", "sk_per_boss", "sk_per_boss2", "sk_per_all", "sk_per_cho", "sk_per_gang", "sk_per_both",
+    "sk_cnt_empty", "sk_cnt_crit", "sk_cnt_maxi", "sk_cnt_boss", "sk_cnt_boss2", "sk_cnt_all", "sk_cnt_cho", "sk_cnt_gang", "sk_cnt_both"];
+  const ALL_IDS = STAT_IDS.concat(SETUP_IDS, TOOL_IDS);
+  const DEFAULTS = {
+    cls: "트윈즈 피카로", field: "네블론 레이드",
+    crit: 83, crit_dmg: 199.4, maxi: 65.1, A: 124172, A_max: 169072, W: 44020, boss: 190, all_skill: 128, cho: 129.5, gang: 99.5,
+    share_cho: 95, polar: 59.2, add: 90.5, hp_over: 34, hp_under: 34, hp100: 41.5,
+    town: "온천 버프", yellow: "1", pants: 11, shoes: 11, eng_kind_1: "matk", eng_val_1: 5, eng_kind_2: "cd", eng_val_2: 5, eng_kind_3: "skill", eng_val_3: 5, enc_cdr: 30, enc_dur: 0,
+    ckb_boss: "2.5", ckb_min: 25, sk_neb: "0", sk_slots: 36, sk_boss_target: "boss", sk_per_crit: 6, sk_per_maxi: 6, sk_per_boss: 3, sk_per_boss2: 2.5, sk_per_all: 2, sk_per_cho: 2.5, sk_per_gang: 2.5, sk_per_both: 2, sk_cnt_crit: 12, sk_cnt_maxi: 8, sk_cnt_boss: 4, sk_cnt_boss2: 4, sk_cnt_cho: 8,
+    opts: [["힘트마", "boss", 6, ""], ["지트마", "cho", 5, ""], ["사냥석", "boss", 5, ""], ["기민석", "both", 4, ""], ["크리 마법석", "crit", 6, ""], ["극대 마법석", "maxi", 6, ""]],
+  };
+  const KEY = "elsword-spec-calc-v2";
+  let optSeq = 0, tab = "compare";
+  const TABS = ["compare", "ckb", "socket"];
+  function setTab(t) {
+    tab = TABS.includes(t) ? t : "compare";
+    for (const k of TABS) { $("tab-" + k).setAttribute("aria-selected", k === tab); $("pane-" + k).hidden = k !== tab; }
+    try { localStorage.setItem(KEY + "-tab", tab); } catch (e) {}
+  }
+
+  for (const name of Object.keys(CLASS)) $("cls").add(new Option(name, name));
+  for (const name of Object.keys(FIELDS)) $("field").add(new Option(name, name));
+  for (const id of ["pants", "shoes"]) for (let n = 0; n <= 13; n++) $(id).add(new Option(n + "강", n));
+
+  function addOptRow(name, kind, value, price) {
+    const i = optSeq++;
+    const row = document.createElement("div");
+    row.className = "opt"; row.dataset.row = "1";
+    const sel = Object.entries(KINDS).map(([k, v]) => `<option value="${k}">${v[0]}</option>`).join("");
+    row.innerHTML =
+      `<input type="text" class="o-name" id="opt-name-${i}" aria-label="옵션 이름" placeholder="이름">` +
+      `<select class="o-kind" id="opt-kind-${i}" aria-label="오르는 스탯">${sel}</select>` +
+      `<input type="number" class="o-val" id="opt-val-${i}" aria-label="수치(%)" step="0.1" placeholder="수치 %">` +
+      `<input type="number" class="o-price" id="opt-price-${i}" aria-label="가격" step="any" min="0" placeholder="가격">` +
+      `<button type="button" class="ghost o-del" aria-label="이 옵션 지우기">✕</button>`;
+    row.querySelector(".o-name").value = name || "";
+    row.querySelector(".o-kind").value = kind || "boss";
+    row.querySelector(".o-val").value = value === "" || value == null ? "" : value;
+    row.querySelector(".o-price").value = price === "" || price == null ? "" : price;
+    $("opts").appendChild(row);
+  }
+  function readOpts() {
+    return [...document.querySelectorAll('#opts [data-row]')].map(r => [
+      r.querySelector(".o-name").value.trim(), r.querySelector(".o-kind").value,
+      r.querySelector(".o-val").value, r.querySelector(".o-price").value]);
+  }
+  function load(state) {
+    $("cls").value = state.cls; $("field").value = state.field;
+    for (const id of ALL_IDS) $(id).value = state[id] == null ? "" : state[id];
+    document.querySelectorAll('#opts [data-row]').forEach(r => r.remove());
+    for (const o of state.opts) addOptRow(...o);
+  }
+  function snapshot() {
+    const s = { cls: $("cls").value, field: $("field").value, opts: readOpts() };
+    for (const id of ALL_IDS) s[id] = $(id).value;
+    return s;
+  }
+  const num = id => { const v = parseFloat($(id).value); return isFinite(v) ? v : null; };
+  const pct = id => { const v = num(id); return v == null ? null : v / 100; };
+  const fmt = (x, d = 2) => (x * 100).toFixed(d) + "%";
+
+  function render() {
+    const cls = $("cls").value, c = CLASS[cls], [debuff, resist] = FIELDS[$("field").value];
+    $("field-info").textContent = `· 크리저항 ${Math.round(resist * 100)}%`;
+    $("cls-info").textContent = `${c.type} · 공격력 ${c.tier}티어 · 패시브: 크확 ${descr(c.crit_s, c.crit_m, c.crit_a)}, 극대 ${descr(c.maxi_s, c.maxi_m, c.maxi_a)}, 크뎀 +${(c.cd_s * 100).toFixed(1).replace(/\.0$/, "")}%` + (c.boss ? `, 보뎀 +${(c.boss * 100).toFixed(1).replace(/\.0$/, "")}%` : "");
+    $("cls-extra").hidden = !EXTRA[cls]; $("cls-extra").textContent = EXTRA[cls] || "";
+
+    const win = {};
+    for (const id of STAT_IDS) {
+      if (id === "A" || id === "A_max" || id === "W") { const v = num(id); if (v != null) win[id] = v; }
+      else if (id === "share_cho") { const v = num(id); const c = v == null ? 85 : Math.min(100, Math.max(0, v)); win.share_cho = c; win.share_gang = 100 - c; }
+      else { const v = pct(id); if (v != null) win[id] = v; }
+    }
+    const z = id => Math.max(0, pct(id) || 0);
+    const town = TOWN[$("town").value] || [0, 0], yellow = $("yellow").value === "1" ? 0.08 : 0;
+    const pants = (2 + (num("pants") || 0)) / 100, shoes = (2 + (num("shoes") || 0)) / 100;
+    const eng = engrave([1, 2, 3].map(i => ({ kind: $("eng_kind_" + i).value, value: z("eng_val_" + i) })));
+    const enc = encourage(z("enc_cdr"), z("enc_dur"));
+    const setup = { town_crit: town[0], town_maxi: town[1], crit_mults: [pants, yellow], maxi_mults: [shoes, yellow],
+      cd_base_mults: [0.10, eng.cd], guild_boss: 0.025 + eng.boss, enc_uptime: enc.uptime };
+    const p1 = x => (x * 100).toFixed(2).replace(/\.?0+$/, "") + "%";
+    const engTxt = [["cd", "크뎀(기본 크뎀 곱연산)"], ["boss", "보뎀"], ["patk", "물공"], ["matk", "마공"], ["skill", "스킬 데미지"]].filter(([k]) => eng[k] > 0).map(([k, n]) => `${n} +${p1(eng[k])}`).join(", ");
+    $("setup-info").textContent = `적용 값 · 마을 버프 크리 +${p1(town[0])} 극대 +${p1(town[1])} · 하의 크확 ×${p1(pants)} · 신발 극대 ×${p1(shoes)}` + (yellow ? " · 황색 크극 ×8%" : "") +
+      ` · 각인석 ${engTxt || "없음"} · 격려 가동률 ${(enc.uptime * 100).toFixed(1)}% (쿨 ${Math.round(enc.cool)}초, 지속 ${Math.round(enc.dur)}초)`;
+    const base = resolve(win, cls, resist, setup);
+
+    // 실전 수치
+    const tiles = [];
+    if (hasCrit(base)) {
+      tiles.push(["평균 크리티컬 확률", fmt(critFinal(base), 1), `스탯창 ${fmt(win.crit, 1)}`]);
+      tiles.push(["크리티컬 데미지", fmt(base.crit_dmg, 1), `스탯창 ${fmt(win.crit_dmg, 1)}`]);
+    }
+    if (hasMaxi(base)) tiles.push(["최종 극대화", fmt(maxiFinal(base), 1), `스탯창 ${fmt(win.maxi, 1)}`]);
+    if (has(base, "boss")) tiles.push(["보스 데미지", fmt(base.boss, 1), `스탯창 ${fmt(win.boss, 1)}`]);
+    $("tiles").innerHTML = tiles.length ? tiles.map(t => `<div class="tile"><div class="k">${t[0]}</div><div class="v">${t[1]}</div><div class="from">${t[2]}</div></div>`).join("")
+      : `<p class="hint">스탯창 값을 입력하면 버프와 패시브가 반영된 수치가 여기에 나와요.</p>`;
+
+    // 옵션 비교
+    const opts = readOpts().map(([name, kind, v, price]) => ({ name: name || KINDS[kind][0], kind, value: parseFloat(v) / 100, price: parseFloat(price) }))
+      .filter(o => isFinite(o.value) && o.value !== 0);
+    let rows = compare(base, opts);
+    const usePrice = rows.some(r => r.per != null);
+    const keyOf = r => usePrice ? (r.per == null ? -Infinity : r.per) : (r.gain == null ? -Infinity : r.gain);
+    rows = rows.slice().sort((a, b) => keyOf(b) - keyOf(a));
+    const ranked = rows.filter(r => keyOf(r) > -Infinity);
+    const maxGain = Math.max(0, ...rows.map(r => r.gain || 0));
+
+    if (!rows.length) { $("verdict").textContent = "비교할 옵션을 추가하세요."; $("result").innerHTML = ""; }
+    else {
+      if (!ranked.length) $("verdict").textContent = "필요한 스탯창 값이 비어 있어서 계산하지 못했어요.";
+      else {
+        const top = ranked[0], second = ranked[1];
+        let txt = usePrice
+          ? `가격 대비로는 <b>${esc(top.name)}</b>${josa(top.name, "이", "가")} 가장 좋아요 (DPS +${fmt(top.gain)}, 가격 ${top.price}).`
+          : `<b>${esc(top.name)}</b>${josa(top.name, "이", "가")} 가장 많이 올라요 (DPS +${fmt(top.gain)}).`;
+        if (second) {
+          if (usePrice) {
+            const ratio = second.per / top.per;
+            txt += ratio > 0.97 ? ` 2위 ${esc(second.name)}${josa(second.name, "과", "와")} 가성비 차이가 3% 안쪽이라 사실상 같아요.`
+              : ` 2위 ${esc(second.name)}의 가성비는 1위의 ${Math.round(ratio * 100)}% 수준이에요.`;
+          } else {
+            const diff = top.gain - second.gain;
+            txt += diff < 0.0005 ? ` 2위 ${esc(second.name)}${josa(second.name, "과", "와")} ${(diff * 100).toFixed(2)}%p 차이라 사실상 같아요. 구하기 쉬운 쪽을 고르세요.`
+              : ` 2위 ${esc(second.name)}보다 ${(diff * 100).toFixed(2)}%p 높아요.`;
+          }
+        }
+        $("verdict").innerHTML = txt.trim();
+      }
+      $("result").className = usePrice ? "priced" : "";
+      const topPer = ranked.length && usePrice ? ranked[0].per : 0;
+      $("result").innerHTML = `<thead><tr><th></th><th>옵션</th><th class="num">DPS 상승</th><th class="barcell"></th>${usePrice ? '<th class="num">가격</th><th class="num">가성비</th>' : ""}</tr></thead><tbody>` +
+        rows.map((r, i) => {
+          const best = ranked.length && r === ranked[0];
+          const gain = r.gain == null ? `<span class="warn">${esc(r.miss)} 입력 필요</span>` : "+" + fmt(r.gain);
+          const bar = r.gain == null || maxGain <= 0 ? "" : `<div class="bar" style="width:${Math.max(1, r.gain / maxGain * 100).toFixed(1)}%"></div>`;
+          const price = usePrice ? `<td class="num">${isFinite(r.price) && r.price > 0 ? r.price : "-"}</td><td class="num gain">${r.per == null ? "-" : Math.round(r.per / topPer * 100)}</td>` : "";
+          return `<tr class="${best ? "best" : ""}"><td class="rank">${keyOf(r) > -Infinity ? i + 1 : ""}</td><td class="name">${esc(r.name)} <span class="hint">${KINDS[r.kind][0]} +${(r.value * 100).toFixed(2).replace(/\.?0+$/, "")}%</span></td><td class="num gain">${gain}</td><td class="barcell">${bar}</td>${price}</tr>`;
+        }).join("") + "</tbody>";
+    }
+
+    const notes = [`${cls}, ${$("field").value} (크리저항 ${Math.round(resist * 100)}%) 기준`];
+    if (has(win, "cho") || has(win, "gang")) notes.push(`딜 점유율 초월 ${win.share_cho}% : 강렬 ${win.share_gang}%` + ($("share_cho").value === "" ? " (비워둬서 기본값 초월 85%를 썼어요)" : ""));
+    if ((win.polar || 0) > POLAR_CAP) notes.push("양극화는 천장 60%까지만 계산했어요");
+    if (usePrice) notes.push("가성비는 DPS 상승 ÷ 가격이고, 1위를 100으로 놓은 값이에요. 가격을 넣은 옵션끼리만 순위를 매겼어요");
+    notes.push("옵션을 하나만 추가했을 때의 상승률이에요. 여러 개를 사면 같은 옵션은 뒤로 갈수록 효율이 떨어져요");
+    $("assume").innerHTML = notes.map(n => `<li>${esc(n)}</li>`).join("");
+
+    if (tab === "ckb") renderCkb(win, cls, resist, setup);
+    if (tab === "socket") renderSocket(win, cls, resist, setup);
+    const col = document.querySelector(".col.results");
+    col.classList.remove("stick"); col.classList.toggle("stick", col.offsetHeight <= window.innerHeight - 24);
+
+    const snap = snapshot();
+    $("example-note").hidden = JSON.stringify(snap) !== JSON.stringify(defaultSnapshot);
+    try { localStorage.setItem(KEY, JSON.stringify(snap)); } catch (e) {}
+  }
+  const zp = id => Math.max(0, pct(id) || 0);
+  const p1s = x => (x * 100).toFixed(2).replace(/\.?0+$/, "") + "%";
+  const signed = (x, d = 2) => (x >= 0 ? "+" : "−") + (Math.abs(x) * 100).toFixed(d) + "%";
+  const arrow = (a, b, d = 2) => Math.abs(a - b) < 5e-5 ? `<td class="num muted" colspan="2">${fmt(a, d)} 그대로</td>` : `<td class="num">${fmt(a, d)}</td><td class="num up">→ ${fmt(b, d)}</td>`;
+
+  function renderCkb(win, cls, resist, setup) {
+    const out = $("ckb-out");
+    if (!(hasCrit(win) && hasMaxi(win) && has(win, "boss"))) {
+      out.innerHTML = `<p class="warn">크리티컬 확률·데미지, 극대화, 공격력, 최댓값, 무기 공격력, 보스 데미지를 모두 입력해야 계산할 수 있어요.</p>`; return;
+    }
+    const bossPer = parseFloat($("ckb_boss").value) / 100, minCrit = zp("ckb_min");
+    const r = optimizeCkb(win, cls, resist, setup, { bossPer, minCrit });
+    const moves = [["크리", r.dCrit], ["극대", r.dMaxi], ["보뎀", r.dBoss]].filter(m => Math.abs(m[1]) >= 0.0005);
+    const verdict = r.gain < 0.0005 || !moves.length
+      ? `지금 크리·극대·보뎀 배분이 이미 최적에 가까워요. 옮겨도 DPS가 ${signed(r.gain)}밖에 안 달라져요.`
+      : `소켓 수치를 ${moves.map(m => `${m[0]} ${signed(m[1], 1)}`).join(", ")}로 옮기면 DPS가 <b>${signed(r.gain)}</b> 올라요.`;
+    const row = (name, a, b, d) => `<tr><td class="name">${name}</td>${arrow(a, b)}<td class="num">${Math.abs(d) < 0.0005 ? "-" : signed(d, 1)}</td></tr>`;
+    out.innerHTML = `<p class="verdict">${verdict}</p>
+      <div class="tbl-wrap"><table><thead><tr><th>스탯창</th><th class="num">현재</th><th class="num">최적</th><th class="num">바꿀 소켓 수치</th></tr></thead><tbody>
+      ${row("크리티컬 확률", win.crit, r.crit, r.dCrit)}${row("극대화", win.maxi, r.maxi, r.dMaxi)}${row("보스 데미지", win.boss, r.boss, r.dBoss)}
+      </tbody></table></div>
+      <ul class="assume">
+        <li>크리·극대 소켓 6%와 보뎀 소켓 ${(bossPer * 100).toFixed(1)}%를 같은 한 칸으로 보고, 0.1% 단위로 전부 계산해서 고른 값이에요</li>
+        <li>"바꿀 소켓 수치"는 마법석에 적힌 수치 기준이에요. 스탯창 숫자는 점감 때문에 그보다 덜 움직여요</li>
+        <li>최적 배분에서 실전 평균 크확 ${fmt(r.critFinal, 1)}, 최종 극대화 ${fmt(r.maxiFinal, 1)}</li>
+        <li>크리티컬은 소켓 수치 ${(minCrit * 100).toFixed(0)}% 아래로는 내리지 않았어요 (장비 고유 옵션처럼 못 빼는 양)</li>
+      </ul>`;
+  }
+
+  const SLOT_BASE = 36;
+  const STONE_NAMES = { crit: "크리티컬", maxi: "극대화", boss: "힘트마 보뎀", boss2: "사냥석 보뎀", all: "모스뎀", cho: "초스뎀", gang: "강렬스뎀", both: "유강강초" };
+  function renderSocket(win, cls, resist, setup) {
+    const out = $("sk-out"), keys = Object.keys(STONE_NAMES), per = {}, cnt = {};
+    for (const k of keys) { per[k] = zp("sk_per_" + k); cnt[k] = Math.max(0, Math.round(num("sk_cnt_" + k) || 0)); }
+    // 지금 낀 칸 수 x 한 칸 수치 = 빼는 수치. 유강강초는 강렬·초월 양쪽에서 뺌
+    // 보뎀: 고른 기준 마법석으로 새로 끼우고, 지금 낀 다른 쪽이 더 좋은 수치면 그건 그대로 둠
+    const target = $("sk_boss_target").value === "boss2" ? "boss2" : "boss", other = target === "boss" ? "boss2" : "boss";
+    const keepOther = per[other] > per[target] && cnt[other] > 0;
+    per.bossTiers = [{ key: target, value: per[target], limit: Infinity }].concat(keepOther ? [{ key: other, value: per[other], limit: cnt[other] }] : []);
+    const cur = { crit: cnt.crit * per.crit, maxi: cnt.maxi * per.maxi, boss: cnt.boss * per.boss + cnt.boss2 * per.boss2, all: cnt.all * per.all,
+      cho: cnt.cho * per.cho + cnt.both * per.both, gang: cnt.gang * per.gang + cnt.both * per.both };
+    const slots = Math.floor(num("sk_slots") || 0), neb = num("sk_neb") || 0, full = SLOT_BASE + neb;
+    const empty = Math.max(0, Math.round(num("sk_cnt_empty") || 0)), have = keys.reduce((a, k) => a + cnt[k], 0) + empty, diff = have - slots;
+    $("sk-scope").textContent = `전체 소켓은 ${full}칸이에요 (기본 ${SLOT_BASE}칸 + 네블론 ${neb}개, 무기 소켓은 한 칸을 2칸으로 계산). ` +
+      (slots === full ? "지금은 전체를 다시 배분해요. 일부만 바꾸려면 칸 수를 직접 줄이세요." : `지금은 그중 ${slots}칸만 다시 배분해요.`);
+    const sc = $("sk-count");
+    sc.className = diff === 0 || slots <= 0 ? "hint" : "warn";
+    sc.textContent = slots <= 0 ? "" : `지금 낀 칸 수 합계 ${have} / ${slots}칸 · ` + (diff === 0 ? "딱 맞아요" : diff < 0 ? `${-diff}칸이 덜 입력됐어요` : `${diff}칸이 더 입력됐어요`);
+    if (slots <= 0) { out.innerHTML = `<p class="hint">다시 배분할 소켓 칸 수를 넣으면 가장 좋은 마법석 조합을 계산해요.</p>`; return; }
+    if (diff !== 0) {
+      out.innerHTML = `<p class="warn">지금 낀 칸 수 합계가 ${have}칸이라 ${diff < 0 ? `${-diff}칸이 덜` : `${diff}칸이 더`} 입력됐어요. 다시 배분할 ${slots}칸과 맞추면 계산해요.</p>`; return;
+    }
+    const r = optimizeSockets(win, cls, resist, setup, slots, per, cur);
+    for (const k of keys) r.counts[k] = r.counts[k] || 0;
+    if (!keys.some(k => r.counts[k] > 0)) { out.innerHTML = `<p class="warn">계산할 수 있는 마법석이 없어요. 스탯창 값과 한 칸 수치를 확인하세요.</p>`; return; }
+    const list = ks => ks.map(k => `${STONE_NAMES[k]} ${Math.abs(r.counts[k] - cnt[k])}칸`).join(", ");
+    const minus = keys.filter(k => r.counts[k] < cnt[k]), plus = keys.filter(k => r.counts[k] > cnt[k]);
+    let verdict;
+    if (!minus.length && !plus.length) verdict = `지금 구성이 이미 최적이에요. 바꿀 필요가 없어요.`;
+    else if (!minus.length) verdict = `빈 ${empty}칸에 <b>${list(plus)}</b>을 끼우면 DPS가 <b>${signed(r.gain)}</b> 올라요.`;
+    else if (r.gain < 0.00005) verdict = `${list(minus)}을 ${list(plus)}으로 바꿔도 DPS가 같아요. 지금 구성 그대로 둬도 돼요.`;
+    else verdict = `${list(minus)}을 빼고 <b>${list(plus)}</b>을 끼우면 DPS가 <b>${signed(r.gain)}</b> 올라요.`;
+    const statOf = { crit: "crit", maxi: "maxi", boss: "boss", all: "all_skill", cho: "cho", gang: "gang" };
+    const row = k => {
+      const d = r.counts[k] - cnt[k], sk = statOf[k];
+      const stat = !sk || r.after[sk] == null ? `<td class="num muted" colspan="2">${k === "both" ? "강렬·초월에 반영" : k === "boss2" ? "위 보스 데미지에 합산" : "-"}</td>` : arrow(win[sk] || 0, r.after[sk]);
+      return `<tr><td class="name">${STONE_NAMES[k]}</td><td class="num">${cnt[k]}</td><td class="num ${d ? "up" : "muted"}">${r.counts[k]}${d ? ` (${d > 0 ? "+" : "−"}${Math.abs(d)})` : ""}</td>${stat}</tr>`;
+    };
+    out.innerHTML = `<p class="verdict">${verdict}</p>
+      <div class="tbl-wrap"><table><thead><tr><th>마법석</th><th class="num">지금</th><th class="num">최적</th><th class="num" colspan="2">스탯창 (현재 → 최적)</th></tr></thead><tbody>
+      ${keys.map(row).join("")}
+      </tbody></table></div>
+      <ul class="assume">
+        <li>${slots}칸을 채우는 모든 조합 중 DPS가 가장 높은 걸 골랐어요${empty ? `. 그중 ${empty}칸은 지금 빈 칸이에요` : ""}</li>
+        <li>지금 낀 마법석도 "한 칸 수치"와 같은 수치라고 보고 계산했어요. 실제 수치가 더 낮으면 상승률은 이보다 커요</li>
+        <li>${keepOther ? `보뎀은 지금 낀 ${STONE_NAMES[other]}(${p1s(per[other])})은 그대로 두고, 새로 끼우는 칸만 ${STONE_NAMES[target]}(${p1s(per[target])})으로 계산했어요`
+          : `보뎀은 전부 ${STONE_NAMES[target]}(${p1s(per[target])})으로 끼운다고 봤어요${cnt[other] > 0 ? `. 지금 낀 ${STONE_NAMES[other]}도 교체 대상이에요` : ""}`}</li>
+        <li>유강강초는 한 칸에 강렬·초월 스뎀이 각각 그 수치만큼 오르는 마법석으로 계산했어요</li>
+        <li>한 칸 수치를 0으로 두면 그 마법석은 후보에서 빠져요</li>
+        ${r.used < r.slots ? `<li>${r.slots - r.used}칸은 채울 수 있는 마법석이 없어서 남겼어요</li>` : ""}
+      </ul>`;
+  }
+
+  function descr(s, m, a) {
+    const parts = [];
+    if (s) parts.push(`스텟 +${Math.round(s * 100)}%`);
+    if (m) parts.push(`곱연산 ${Math.round(m * 100)}%`);
+    if (a) parts.push(`최종 +${Math.round(a * 100)}%`);
+    return parts.join(" · ") || "없음";
+  }
+  function josa(word, a, b) {
+    const ch = word.charCodeAt(word.length - 1);
+    if (ch < 0xAC00 || ch > 0xD7A3) return a + "(" + b + ")";
+    return (ch - 0xAC00) % 28 ? a : b;
+  }
+  function esc(t) { return String(t).replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch])); }
+
+  load(DEFAULTS);
+  const defaultSnapshot = snapshot();
+  try {
+    const saved = JSON.parse(localStorage.getItem(KEY) || "null");
+    if (saved && CLASS[saved.cls] && FIELDS[saved.field] && Array.isArray(saved.opts)) {
+      if (saved.sk_neb == null) saved.sk_slots = DEFAULTS.sk_slots;   // 예전 저장값: 전체 교체 기본으로 맞춤
+      if (!("sk_cnt_boss2" in saved)) saved.sk_cnt_boss2 = "";   // 예전 저장값: 보뎀은 전부 힘트마 칸으로 저장돼 있음
+      if (!("sk_cnt_crit" in saved)) for (const k of Object.keys(STONE_NAMES)) saved["sk_cnt_" + k] = "";   // 예전 저장값엔 칸 수가 없음
+      load(Object.assign({}, DEFAULTS, saved));
+    }
+  } catch (e) {}
+
+  document.querySelector(".wrap").addEventListener("input", render);
+  document.querySelector(".wrap").addEventListener("change", render);
+  $("opts").addEventListener("click", e => { const b = e.target.closest(".o-del"); if (b) { b.closest(".opt").remove(); render(); } });
+  document.querySelector(".presets").addEventListener("click", e => {
+    const b = e.target.closest("button[data-preset]"); if (!b) return;
+    const [name, kind, value] = b.dataset.preset.split("|");
+    addOptRow(name, kind || "boss", value, ""); render();
+    if (!name) { const rows = document.querySelectorAll("#opts [data-row]"); rows[rows.length - 1].querySelector(".o-name").focus(); }
+  });
+  $("reset").addEventListener("click", () => { load(DEFAULTS); render(); });
+  $("sk_neb").addEventListener("change", () => { $("sk_slots").value = SLOT_BASE + (num("sk_neb") || 0); });
+  document.querySelector(".tabs").addEventListener("click", e => { const b = e.target.closest('[role="tab"]'); if (b) { setTab(b.id.slice(4)); render(); } });
+  window.addEventListener("resize", () => { const col = document.querySelector(".col.results"); col.classList.remove("stick"); col.classList.toggle("stick", col.offsetHeight <= window.innerHeight - 24); });
+  try { setTab(localStorage.getItem(KEY + "-tab")); } catch (e) { setTab("compare"); }
+  render();
+})();
+</script>
+</body>
+</html>
