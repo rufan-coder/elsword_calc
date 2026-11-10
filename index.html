@@ -74,6 +74,14 @@ details[open] > summary { margin-bottom: 12px; }
 .opt-head { font-size: 11.5px; color: var(--muted); }
 .engs { display: flex; flex-direction: column; gap: 8px; }
 .eng { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); gap: 8px; }
+.shot { border: 1px dashed var(--line); border-radius: 8px; padding: 12px; margin-bottom: 16px; background: var(--panel-2); display: flex; flex-direction: column; gap: 8px; }
+.shot.drag { border-color: var(--accent); background: var(--accent-soft); }
+.shot .top { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; justify-content: space-between; }
+.shot b { font-family: var(--font-display); font-weight: 600; }
+.filebtn { cursor: pointer; border: 1px solid var(--line); background: var(--panel); border-radius: 7px; padding: 6px 11px; position: relative; }
+.filebtn:hover { border-color: var(--accent); } .filebtn:focus-within { outline: 2px solid var(--accent); outline-offset: 1px; }
+.filebtn input { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
+input.filled { border-color: var(--best); box-shadow: inset 0 0 0 1px var(--best); }
 .presets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; align-items: center; }
 .presets span { font-size: 12px; color: var(--muted); }
 .presets button { font-size: 12.5px; padding: 4px 9px; }
@@ -137,6 +145,14 @@ footer { color: var(--muted); font-size: 12px; margin-top: 22px; }
 
       <section class="panel">
         <h2>스탯창 값 <small>게임 스탯창에 보이는 숫자 그대로</small></h2>
+        <div class="shot" id="shot-zone">
+          <div class="top">
+            <b>스크린샷으로 채우기</b>
+            <label class="filebtn"><input type="file" id="shot-file" accept="image/*">스크린샷 고르기</label>
+          </div>
+          <p class="hint">게임의 상세 스탯 창을 찍어서 여기에 끌어다 놓거나, 붙여넣기(Ctrl+V) 하세요. 주 공격력(물리·마법 공격력)에 마우스를 올려 [공격력 범위] 툴팁이 같이 찍히면 극대화 최댓값까지 읽어요. 이미지는 브라우저 안에서만 처리돼요.</p>
+          <p id="shot-status" class="hint" aria-live="polite" hidden></p>
+        </div>
         <div class="sub">크리티컬 · 극대화</div>
         <div class="grid">
           <div class="field"><label for="crit">크리티컬 확률</label><div class="unit"><input type="number" id="crit" step="0.01" inputmode="decimal"><span>%</span></div></div>
@@ -144,7 +160,6 @@ footer { color: var(--muted); font-size: 12px; margin-top: 22px; }
           <div class="field"><label for="maxi">극대화</label><div class="unit"><input type="number" id="maxi" step="0.01" inputmode="decimal"><span>%</span></div></div>
           <div class="field"><label for="A">공격력 (주 공격 타입)</label><input type="number" id="A" step="1" inputmode="numeric"></div>
           <div class="field"><label for="A_max">극대화 범위 내 최댓값</label><input type="number" id="A_max" step="1" inputmode="numeric"></div>
-          <div class="field"><label for="W">무기 공격력</label><input type="number" id="W" step="1" inputmode="numeric"></div>
         </div>
         <div class="sub">데미지 증가</div>
         <div class="grid">
@@ -296,8 +311,8 @@ function critFinal(s) {
   return clamp01(s.enc_uptime ? critWithEncourage(p0, adds, s.enc_uptime) : p0 + sum(adds));
 }
 function maxiFinal(s) { return Math.min(1, s.maxi * prod(s.maxi_mults || []) + sum(s.maxi_adds || [])); }
-function statAtkPct(A, Amax, W) { return 2 * (Amax - A) / (1.1 * W) - 1; }
-function maximizeMultiplier(M, A, W, Ps) { return 1 + 0.55 * M * W * (1 + Ps) / A; }
+/* 극대화 배율 = 1 + 0.55·M·W·(1+Ps)/A, Ps = 2(Amax-A)/(1.1W) - 1  ->  무기 공격력 W가 약분돼 1 + M·(Amax-A)/A */
+function maxiMult(M, A, Amax) { return 1 + M * Math.max(0, Amax - A) / A; }
 function preShares(sg, sc, gang, cho) {
   const g = sg / (1 + gang), c = sc / (1 + cho);
   return g + c > 0 ? [g / (g + c), c / (g + c)] : [0, 1];
@@ -306,7 +321,7 @@ function hpMultiplier(o, u, c3o, c3u) { return 0.5 * (1 + o) * prod(c3o || []) +
 const POLAR_CAP = 0.60;
 const has = (s, k) => typeof s[k] === "number" && isFinite(s[k]);
 const hasCrit = s => has(s, "crit") && has(s, "crit_dmg");
-const hasMaxi = s => has(s, "maxi") && has(s, "A") && has(s, "W") && has(s, "A_max") && s.A > 0 && s.W > 0;
+const hasMaxi = s => has(s, "maxi") && has(s, "A") && has(s, "A_max") && s.A > 0;
 
 function dpsIndex(s) {
   let x = 1;
@@ -319,7 +334,7 @@ function dpsIndex(s) {
     x *= Rc * (1 + c) + Rg * (1 + g);
   }
   if (hasCrit(s)) { const p = critFinal(s); x *= 1 - p + p * s.crit_dmg; }
-  if (hasMaxi(s)) x *= maximizeMultiplier(maxiFinal(s), s.A, s.W, statAtkPct(s.A, s.A_max, s.W));
+  if (hasMaxi(s)) x *= maxiMult(maxiFinal(s), s.A, s.A_max);
   x *= hpMultiplier(s.hp_over || 0, s.hp_under || 0, s.hp3_over, s.hp3_under);
   return x;
 }
@@ -465,7 +480,7 @@ const KINDS = {
 };
 function missingFor(need, s) {
   if (need === "crit") return hasCrit(s) ? null : "크리티컬 확률과 크리티컬 데미지";
-  if (need === "maxi") return hasMaxi(s) ? null : "극대화, 공격력, 최댓값, 무기 공격력";
+  if (need === "maxi") return hasMaxi(s) ? null : "극대화, 공격력, 최댓값";
   if (need === "skill") return (has(s, "cho") || has(s, "gang")) ? null : "초월·강렬 스킬 데미지";
   return has(s, need) ? null : KINDS[need] ? KINDS[need][0] : need;
 }
@@ -501,8 +516,8 @@ function critFactor(win, cls, resist, st, critWindow) {
   const p = critFinal(s); return 1 - p + p * s.crit_dmg;
 }
 function maxiFactor(win, cls, resist, st, maxiWindow) {
-  const s = resolve({ maxi: maxiWindow, A: win.A, W: win.W, A_max: win.A_max }, cls, resist, st);
-  return maximizeMultiplier(maxiFinal(s), s.A, s.W, statAtkPct(s.A, s.A_max, s.W));
+  const s = resolve({ maxi: maxiWindow, A: win.A, A_max: win.A_max }, cls, resist, st);
+  return maxiMult(maxiFinal(s), s.A, s.A_max);
 }
 const classOf = cls => (cls && CLASS[cls]) || { crit_s: 0, maxi_s: 0, boss: 0, gang: 0, cho: 0 };
 /* 크극 최적화: 크리·극대 소켓 6% = 보뎀 소켓 bossPer 로 맞바꾸며 0.1% 단위로 전수 탐색. 수치는 소켓(점감 전) 기준 */
@@ -594,19 +609,178 @@ function optimizeSockets(win, cls, resist, st, slots, per, cur) {
 if (typeof module !== "undefined") module.exports = { optimizeCkb, optimizeSockets, critFactor, maxiFactor, resolve, compare, critFinal, maxiFinal, dpsIndex, CLASS, FIELDS, critFromStat, statFromCrit, TOWN, encourage, engrave };
 </script>
 
+<script id="ocr">
+/* ===== 스크린샷 인식 (상세 스탯 창) ===== */
+/* [띄어쓰기·기호를 뺀 라벨, 채울 칸]. 칸이 null인 줄은 비슷한 이름과 헷갈리지 않게 넣어둔 다른 스탯 */
+const OCR_LABELS = [
+  ["크리티컬확률", "crit"], ["크리티컬데미지", "crit_dmg"], ["극대화", "maxi"], ["양극화타격피격데미지증가", "polar"], ["양극화", "polar"],
+  ["보스에게주는피해증가", "boss"], ["공격시추가지속피해", "add"],
+  ["체력50초과인적공격시데미지증가", "hp_over"], ["체력50이하인적공격시데미지증가", "hp_under"], ["체력100이하인적공격시데미지증가", "hp100"],
+  ["강렬한스킬데미지증가", "gang"], ["초월한스킬데미지증가", "cho"], ["모든스킬데미지증가", "all_skill"],
+  ["물리공격력", "patk"], ["마법공격력", "matk"],
+  ["보스에게받는피해감소", null], ["하이퍼스킬데미지증가", null], ["강렬한스킬재사용시간감소", null], ["초월한스킬재사용시간감소", null],
+  ["스킬사용시재사용시간초기화확률", null], ["적마법방어력무시", null], ["적물리방어력무시", null], ["데미지감소", null],
+  ["동작속도", null], ["이동속도", null], ["점프속도", null], ["적응력", null], ["초적응력", null],
+  ["경험치획득량증가", null], ["ED획득량증가", null], ["아이템드랍률증가", null], ["스킬사용시MP소모감소", null], ["타격시MP회복증가", null],
+];
+const normLabel = t => String(t).replace(/[^0-9A-Za-z가-힣]/g, "");
+/* pat과 text의 어느 한 구간 사이의 최소 편집 거리 */
+function fuzzyFind(pat, text) {
+  let prev = new Array(text.length + 1).fill(0);
+  for (let i = 1; i <= pat.length; i++) {
+    const cur = [i];
+    for (let j = 1; j <= text.length; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (pat[i - 1] === text[j - 1] ? 0 : 1));
+    prev = cur;
+  }
+  return Math.min(...prev);
+}
+function matchLabel(raw) {
+  const text = normLabel(raw); if (text.length < 2) return null;
+  let best = null;
+  for (const [pat, field] of OCR_LABELS) {
+    if (text.length > pat.length + 4) continue;   // 옆 칸 라벨이 섞인 긴 글자는 받지 않음
+    const score = 1 - fuzzyFind(pat, text) / pat.length;
+    if (score < 0.7) continue;
+    if (!best || score > best.score + 0.02 || (Math.abs(score - best.score) <= 0.02 && pat.length > best.pat.length)) best = { pat, field, score };
+  }
+  return best;
+}
+/* numWords: 하늘색 숫자만 읽은 결과, labWords/labLines: 흰 글자를 읽은 결과. 단어는 {text,x0,y0,x1,y1,conf} */
+function parseShot(numWords, labWords, labLines) {
+  const all = numWords.filter(w => /\d/.test(w.text)).map(w => Object.assign({}, w, { yc: (w.y0 + w.y1) / 2, h: w.y1 - w.y0 }));
+  const cand = {};
+  for (const n of all) {
+    // 형식이 정확히 맞는 숫자만 받음: 공격력은 정수, 나머지는 "83.00%" 꼴. 애매하게 읽힌 값은 버리고 빈칸으로 둠
+    const atkText = /^\d{3,8}$/.test(n.text), pctText = /^\d{1,3}\.\d{2}%$/.test(n.text);
+    if (n.conf < 60 || !(atkText || pctText)) continue;
+    const left = Math.max(0, ...all.filter(m => m !== n && Math.abs(m.yc - n.yc) < n.h * 0.6 && m.x1 <= n.x0).map(m => m.x1));
+    const row = labWords.filter(w => Math.abs((w.y0 + w.y1) / 2 - n.yc) < n.h * 0.7 && w.x0 >= left - 2 && w.x1 <= n.x0 + 2).sort((a, b) => b.x0 - a.x0);
+    // 숫자 바로 왼쪽의 라벨 한 덩어리만 사용. 단어 사이가 크게 벌어지면 끊음 (옆 칸 숫자를 놓쳤을 때 그 칸 라벨이 섞이지 않게)
+    const seg = [];
+    for (const w of row) { if (seg.length && seg[seg.length - 1].x0 - w.x1 > n.h * 2.2) break; seg.push(w); }
+    const m = matchLabel(seg.reverse().map(w => w.text).join(""));
+    if (!m || !m.field) continue;
+    const isAtk = m.field === "patk" || m.field === "matk";
+    if (isAtk !== atkText) continue;
+    const value = isAtk ? parseInt(n.text, 10) : parseFloat(n.text);
+    if ((m.field === "crit" || m.field === "maxi") && value > 100) continue;
+    (cand[m.field] = cand[m.field] || []).push({ value, score: m.score });
+  }
+  const found = {};
+  for (const k of Object.keys(cand)) {
+    const list = cand[k].sort((a, b) => b.score - a.score);
+    if (list.length > 1 && list[1].value !== list[0].value && list[0].score - list[1].score < 0.15) continue;   // 같은 칸에 다른 값이 비슷한 확신으로 잡히면 버림
+    found[k] = list[0];
+  }
+  let range = null;   // [마법 공격력 범위] 137848~169166 툴팁
+  for (let i = 0; i < labLines.length && !range; i++) {
+    const t = labLines[i].replace(/\s/g, ""), mm = t.match(/(\d{4,8})[~\-–—_=]+(\d{4,8})/);
+    if (!mm || +mm[2] <= +mm[1]) continue;
+    const ctx = (labLines[i - 1] || "") + t;
+    range = { min: +mm[1], max: +mm[2], type: /마법/.test(ctx) ? "마법" : /물리/.test(ctx) ? "물리" : null };
+  }
+  return { found, range };
+}
+if (typeof module !== "undefined") module.exports = { matchLabel, parseShot, fuzzyFind };
+
+/* --- 아래는 브라우저 전용 --- */
+const OCR_CDN = {   // 글자 인식 엔진(tesseract.js)과 한글 데이터. 버전을 고정해 둠
+  script: "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js",
+  workerPath: "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/worker.min.js",
+  corePath: "https://cdn.jsdelivr.net/npm/tesseract.js-core@5.1.1",
+  langPath: "https://cdn.jsdelivr.net/npm/@tesseract.js-data/kor@1.0.0/4.0.0_best_int",
+};
+let ocrWorker = null;
+function ocrLoadScript() {
+  if (window.Tesseract) return Promise.resolve();
+  return new Promise((res, rej) => {
+    const s = document.createElement("script");
+    s.src = Object.assign({}, OCR_CDN, window.OCR_PATHS).script;
+    s.onload = () => res(); s.onerror = () => rej(new Error("load"));
+    document.head.appendChild(s);
+  });
+}
+/* 스탯 줄 배경색(36,42,48, 살짝 푸른 회색)이 모여 있는 곳 = 상세 스탯 창 */
+function ocrBestRun(hist, maxGap) {   // 기준을 넘는 칸이 이어진 구간 중 합이 가장 큰 것 (작은 틈은 이어 붙임)
+  let peak = 0; for (const v of hist) if (v > peak) peak = v;
+  const th = peak * 0.3; let best = null, s = -1, last = -1, sum = 0;
+  const close = () => { if (s >= 0 && (!best || sum > best.sum)) best = { a: s, b: last, sum }; };
+  for (let i = 0; i < hist.length; i++) {
+    if (hist[i] <= th) continue;
+    if (s < 0 || i - last > maxGap) { close(); s = i; sum = 0; }
+    sum += hist[i]; last = i;
+  }
+  close(); return best && Object.assign(best, { peak });
+}
+function ocrFindPanel(ctx, w, h) {
+  const d = ctx.getImageData(0, 0, w, h).data, isBg = new Uint8Array(w * h), cols = new Uint32Array(w);
+  for (let p = 0, i = 0; p < w * h; p++, i += 4) {
+    const r = d[i], g = d[i + 1], b = d[i + 2];
+    if (Math.abs(r - 36) <= 6 && Math.abs(g - 42) <= 6 && Math.abs(b - 48) <= 6 && b - r >= 6) { isBg[p] = 1; cols[p % w]++; }
+  }
+  const cx = ocrBestRun(cols, 12);
+  if (!cx || cx.peak < 100 || cx.b - cx.a < 150) return null;
+  const rows = new Uint32Array(h);
+  for (let y = 0; y < h; y++) { let n = 0; for (let x = cx.a; x <= cx.b; x++) n += isBg[y * w + x]; rows[y] = n; }
+  const ry = ocrBestRun(rows, Math.max(40, Math.round((cx.b - cx.a) * 0.1)));
+  if (!ry || ry.b - ry.a < 80) return null;
+  return { x0: cx.a, y0: ry.a, x1: cx.b, y1: ry.b };
+}
+/* 글자 색만 남긴 흑백 이미지. num = 하늘색 수치, lab = 흰색 라벨 */
+function ocrMask(src, sx, sy, sw, sh, scale, kind) {
+  const c = document.createElement("canvas"); c.width = Math.round(sw * scale); c.height = Math.round(sh * scale);
+  const g = c.getContext("2d", { willReadFrequently: true }); g.imageSmoothingEnabled = true; g.imageSmoothingQuality = "high";
+  g.drawImage(src, sx, sy, sw, sh, 0, 0, c.width, c.height);
+  const id = g.getImageData(0, 0, c.width, c.height), d = id.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const r = d[i], gg = d[i + 1], b = d[i + 2];
+    // num: 모양은 밝기로(JPEG에서도 선명), 색은 하늘색인지만 느슨하게 확인. lab: 흰 글자
+    const c01 = x => Math.min(1, Math.max(0, x));
+    const t = kind === "num" ? c01((0.299 * r + 0.587 * gg + 0.114 * b - 55) / 60) * c01((Math.min(gg, b) - r - 22) / 18) : (Math.min(r, gg, b) - 70) / 110;
+    d[i] = d[i + 1] = d[i + 2] = 255 - 255 * Math.min(1, Math.max(0, t)); d[i + 3] = 255;
+  }
+  g.putImageData(id, 0, 0); return c;
+}
+async function ocrShot(img, onStatus) {
+  const w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+  const c = document.createElement("canvas"); c.width = w; c.height = h;
+  const ctx = c.getContext("2d", { willReadFrequently: true }); ctx.drawImage(img, 0, 0);
+  const box = ocrFindPanel(ctx, w, h);
+  let sx = 0, sy = 0, ex = w, ey = h;
+  if (box) {   // 위쪽은 공격력 범위 툴팁이 들어오도록 넉넉하게
+    const pw = box.x1 - box.x0, ph = box.y1 - box.y0;
+    sx = Math.max(0, box.x0 - pw * 0.06); sy = Math.max(0, box.y0 - ph * 0.30); ex = Math.min(w, box.x1 + pw * 0.12); ey = Math.min(h, box.y1 + ph * 0.03);
+  }
+  const scale = Math.min(box ? 4 : 2, Math.max(1, 1640 / (ex - sx)));
+  onStatus("글자 인식 엔진을 불러오는 중… (처음 한 번만 몇 초 걸려요)");
+  await ocrLoadScript();
+  if (!ocrWorker) {
+    const P = Object.assign({}, OCR_CDN, window.OCR_PATHS), opt = { logger: m => { if (m.status === "recognizing text") onStatus(`글자를 읽는 중… ${Math.round(m.progress * 100)}%`); } };
+    for (const k of ["workerPath", "corePath", "langPath"]) if (P[k]) opt[k] = P[k];
+    ocrWorker = await Tesseract.createWorker("kor", 1, opt);
+  }
+  const words = r => r.data.words.map(x => ({ text: x.text, conf: x.confidence, x0: x.bbox.x0, y0: x.bbox.y0, x1: x.bbox.x1, y1: x.bbox.y1 }));
+  await ocrWorker.setParameters({ tessedit_pageseg_mode: "6", tessedit_char_whitelist: "0123456789.%" });
+  const rn = await ocrWorker.recognize(ocrMask(c, sx, sy, ex - sx, ey - sy, scale, "num"));
+  await ocrWorker.setParameters({ tessedit_pageseg_mode: "6", tessedit_char_whitelist: "" });
+  const rl = await ocrWorker.recognize(ocrMask(c, sx, sy, ex - sx, ey - sy, scale, "lab"));
+  return Object.assign(parseShot(words(rn), words(rl), rl.data.lines.map(l => l.text)), { panel: !!box });
+}
+</script>
+
 <script>
 /* ===== 화면 ===== */
 (function () {
   const $ = id => document.getElementById(id);
-  const STAT_IDS = ["crit", "crit_dmg", "maxi", "A", "A_max", "W", "boss", "all_skill", "cho", "gang", "share_cho", "polar", "add", "hp_over", "hp_under", "hp100"];
+  const STAT_IDS = ["crit", "crit_dmg", "maxi", "A", "A_max", "boss", "all_skill", "cho", "gang", "share_cho", "polar", "add", "hp_over", "hp_under", "hp100"];
   const SETUP_IDS = ["town", "yellow", "pants", "shoes", "eng_kind_1", "eng_val_1", "eng_kind_2", "eng_val_2", "eng_kind_3", "eng_val_3", "enc_cdr", "enc_dur"];
   const TOOL_IDS = ["ckb_boss", "ckb_min", "sk_neb", "sk_slots", "sk_boss_target", "sk_per_crit", "sk_per_maxi", "sk_per_boss", "sk_per_boss2", "sk_per_all", "sk_per_cho", "sk_per_gang", "sk_per_both",
     "sk_cnt_empty", "sk_cnt_crit", "sk_cnt_maxi", "sk_cnt_boss", "sk_cnt_boss2", "sk_cnt_all", "sk_cnt_cho", "sk_cnt_gang", "sk_cnt_both"];
   const ALL_IDS = STAT_IDS.concat(SETUP_IDS, TOOL_IDS);
   const DEFAULTS = {
     cls: "트윈즈 피카로", field: "네블론 레이드",
-    crit: 83, crit_dmg: 199.4, maxi: 65.1, A: 124172, A_max: 169072, W: 44020, boss: 190, all_skill: 128, cho: 129.5, gang: 99.5,
-    share_cho: 95, polar: 59.2, add: 90.5, hp_over: 34, hp_under: 34, hp100: 41.5,
+    crit: 83, crit_dmg: 199.4, maxi: 65.12, A: 124266, A_max: 169166, boss: 190, all_skill: 127.5, cho: 130.1, gang: 100.1,
+    share_cho: 95, polar: 59.2, add: 91.5, hp_over: 34, hp_under: 17, hp100: 41.5,
     town: "온천 버프", yellow: "1", pants: 11, shoes: 11, eng_kind_1: "matk", eng_val_1: 5, eng_kind_2: "cd", eng_val_2: 5, eng_kind_3: "skill", eng_val_3: 5, enc_cdr: 30, enc_dur: 0,
     ckb_boss: "2.5", ckb_min: 25, sk_neb: "0", sk_slots: 36, sk_boss_target: "boss", sk_per_crit: 6, sk_per_maxi: 6, sk_per_boss: 3, sk_per_boss2: 2.5, sk_per_all: 2, sk_per_cho: 2.5, sk_per_gang: 2.5, sk_per_both: 2, sk_cnt_crit: 12, sk_cnt_maxi: 8, sk_cnt_boss: 4, sk_cnt_boss2: 4, sk_cnt_cho: 8,
     opts: [["힘트마", "boss", 6, ""], ["지트마", "cho", 5, ""], ["사냥석", "boss", 5, ""], ["기민석", "both", 4, ""], ["크리 마법석", "crit", 6, ""], ["극대 마법석", "maxi", 6, ""]],
@@ -669,7 +843,7 @@ if (typeof module !== "undefined") module.exports = { optimizeCkb, optimizeSocke
 
     const win = {};
     for (const id of STAT_IDS) {
-      if (id === "A" || id === "A_max" || id === "W") { const v = num(id); if (v != null) win[id] = v; }
+      if (id === "A" || id === "A_max") { const v = num(id); if (v != null) win[id] = v; }
       else if (id === "share_cho") { const v = num(id); const c = v == null ? 85 : Math.min(100, Math.max(0, v)); win.share_cho = c; win.share_gang = 100 - c; }
       else { const v = pct(id); if (v != null) win[id] = v; }
     }
@@ -764,7 +938,7 @@ if (typeof module !== "undefined") module.exports = { optimizeCkb, optimizeSocke
   function renderCkb(win, cls, resist, setup) {
     const out = $("ckb-out");
     if (!(hasCrit(win) && hasMaxi(win) && has(win, "boss"))) {
-      out.innerHTML = `<p class="warn">크리티컬 확률·데미지, 극대화, 공격력, 최댓값, 무기 공격력, 보스 데미지를 모두 입력해야 계산할 수 있어요.</p>`; return;
+      out.innerHTML = `<p class="warn">크리티컬 확률·데미지, 극대화, 공격력, 최댓값, 보스 데미지를 모두 입력해야 계산할 수 있어요.</p>`; return;
     }
     const bossPer = parseFloat($("ckb_boss").value) / 100, minCrit = zp("ckb_min");
     const r = optimizeCkb(win, cls, resist, setup, { bossPer, minCrit });
@@ -874,7 +1048,53 @@ if (typeof module !== "undefined") module.exports = { optimizeCkb, optimizeSocke
     addOptRow(name, kind || "boss", value, ""); render();
     if (!name) { const rows = document.querySelectorAll("#opts [data-row]"); rows[rows.length - 1].querySelector(".o-name").focus(); }
   });
-  $("reset").addEventListener("click", () => { load(DEFAULTS); render(); });
+  $("reset").addEventListener("click", () => { load(DEFAULTS); clearFilled(); render(); });
+
+  // ----- 스크린샷으로 채우기 -----
+  const SHOT_FIELDS = { crit: "크리티컬 확률", crit_dmg: "크리티컬 데미지", maxi: "극대화", A: "공격력", A_max: "극대화 범위 내 최댓값", boss: "보스 데미지", all_skill: "모든 스킬 데미지",
+    cho: "초월한 스킬 데미지", gang: "강렬한 스킬 데미지", polar: "양극화", add: "추가 피해", hp_over: "HP 50% 초과", hp_under: "HP 50% 이하", hp100: "HP 100% 이하" };
+  let shotBusy = false;
+  function clearFilled() { document.querySelectorAll("input.filled").forEach(el => el.classList.remove("filled")); }
+  function shotStatus(text, warn) { const el = $("shot-status"); el.hidden = !text; el.className = warn ? "warn" : "hint"; el.textContent = text || ""; }
+  function fileToImage(file) {
+    return new Promise((res, rej) => { const url = URL.createObjectURL(file), im = new Image(); im.onload = () => { URL.revokeObjectURL(url); res(im); }; im.onerror = () => { URL.revokeObjectURL(url); rej(new Error("image")); }; im.src = url; });
+  }
+  async function fillFromShot(file) {
+    if (shotBusy || !file) return;
+    shotBusy = true; shotStatus("이미지를 여는 중…");
+    try {
+      const img = await fileToImage(file);
+      const r = await ocrShot(img, t => shotStatus(t));
+      const type = CLASS[$("cls").value].type, vals = {};
+      for (const k of Object.keys(r.found)) if (k !== "patk" && k !== "matk") vals[k] = r.found[k].value;
+      const atk = r.found[type === "마법" ? "matk" : "patk"]; if (atk) vals.A = atk.value;
+      let extra = "";
+      if (r.range) {
+        if (r.range.type && r.range.type !== type) extra = ` 스크린샷의 툴팁은 ${r.range.type} 공격력 범위인데 전직은 ${type} 타입이라 최댓값은 넣지 않았어요.`;
+        else if (vals.A == null || r.range.max >= vals.A) vals.A_max = r.range.max;
+      }
+      const got = Object.keys(SHOT_FIELDS).filter(k => vals[k] != null), miss = Object.keys(SHOT_FIELDS).filter(k => vals[k] == null);
+      if (!got.length) { shotStatus(r.panel ? "상세 스탯 창은 찾았는데 수치를 읽지 못했어요. 창이 가려지지 않게 다시 찍어 보세요." : "상세 스탯 창을 찾지 못했어요. 상세 스탯 창이 보이게 찍은 스크린샷인지 확인하세요.", true); return; }
+      clearFilled();
+      for (const k of got) { const el = $(k); el.value = String(Math.round(vals[k] * 100) / 100); el.classList.add("filled"); }
+      if (miss.includes("A_max") && !extra) extra = " 극대화 최댓값은 주 공격력에 마우스를 올려 [공격력 범위] 툴팁이 보이게 찍어야 읽을 수 있어요.";
+      shotStatus(`${got.length}개 칸을 채웠어요 (${type} 공격력 기준). 테두리가 표시된 칸이 읽은 값이니 스크린샷과 한 번 비교하세요.` +
+        (miss.length ? ` 못 읽은 칸: ${miss.map(k => SHOT_FIELDS[k]).join(", ")}.` : "") + extra, miss.length > 0);
+      render();
+    } catch (e) {
+      shotStatus(e && e.message === "image" ? "이미지 파일을 열지 못했어요." : "글자 인식 엔진을 불러오지 못했어요. 인터넷 연결을 확인하거나, 이 환경에서 막혀 있다면 직접 입력해 주세요.", true);
+    } finally { shotBusy = false; $("shot-file").value = ""; }
+  }
+  $("shot-file").addEventListener("change", e => fillFromShot(e.target.files[0]));
+  document.addEventListener("paste", e => {
+    const f = [...((e.clipboardData && e.clipboardData.files) || [])].find(x => x.type.startsWith("image/"));
+    if (f) { e.preventDefault(); fillFromShot(f); }
+  });
+  const zone = $("shot-zone");
+  zone.addEventListener("dragover", e => { e.preventDefault(); zone.classList.add("drag"); });
+  zone.addEventListener("dragleave", () => zone.classList.remove("drag"));
+  zone.addEventListener("drop", e => { e.preventDefault(); zone.classList.remove("drag"); fillFromShot([...e.dataTransfer.files].find(x => x.type.startsWith("image/"))); });
+  document.querySelector(".wrap").addEventListener("input", e => { if (e.target.classList) e.target.classList.remove("filled"); });
   $("sk_neb").addEventListener("change", () => { $("sk_slots").value = SLOT_BASE + (num("sk_neb") || 0); });
   document.querySelector(".tabs").addEventListener("click", e => { const b = e.target.closest('[role="tab"]'); if (b) { setTab(b.id.slice(4)); render(); } });
   window.addEventListener("resize", () => { const col = document.querySelector(".col.results"); col.classList.remove("stick"); col.classList.toggle("stick", col.offsetHeight <= window.innerHeight - 24); });
