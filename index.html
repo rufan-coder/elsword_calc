@@ -160,6 +160,7 @@ footer { color: var(--muted); font-size: 12px; margin-top: 22px; }
           <div class="field"><label for="maxi">극대화</label><div class="unit"><input type="number" id="maxi" step="0.01" inputmode="decimal"><span>%</span></div></div>
           <div class="field"><label for="A">공격력 (주 공격 타입)</label><input type="number" id="A" step="1" inputmode="numeric"></div>
           <div class="field"><label for="A_max">극대화 범위 내 최댓값</label><input type="number" id="A_max" step="1" inputmode="numeric"></div>
+          <div class="field"><label for="W">무기 공격력 (장비 툴팁)</label><input type="number" id="W" step="1" inputmode="numeric"></div>
         </div>
         <div class="sub">데미지 증가</div>
         <div class="grid">
@@ -167,12 +168,12 @@ footer { color: var(--muted); font-size: 12px; margin-top: 22px; }
           <div class="field"><label for="all_skill">모든 스킬 데미지</label><div class="unit"><input type="number" id="all_skill" step="0.01" inputmode="decimal"><span>%</span></div></div>
           <div class="field"><label for="cho">초월한 스킬 데미지</label><div class="unit"><input type="number" id="cho" step="0.01" inputmode="decimal"><span>%</span></div></div>
           <div class="field"><label for="gang">강렬한 스킬 데미지</label><div class="unit"><input type="number" id="gang" step="0.01" inputmode="decimal"><span>%</span></div></div>
-          <div class="field"><label for="share_cho">초월 스킬 딜 점유율</label><div class="unit"><input type="number" id="share_cho" step="1" min="0" max="100" inputmode="decimal"><span>%</span></div></div>
           <div class="field"><label for="polar">양극화</label><div class="unit"><input type="number" id="polar" step="0.01" inputmode="decimal"><span>%</span></div></div>
           <div class="field"><label for="add">추가 피해</label><div class="unit"><input type="number" id="add" step="0.01" inputmode="decimal"><span>%</span></div></div>
           <div class="field"><label for="hp_over">HP 50% 초과 적 데미지</label><div class="unit"><input type="number" id="hp_over" step="0.01" inputmode="decimal"><span>%</span></div></div>
           <div class="field"><label for="hp_under">HP 50% 이하 적 데미지</label><div class="unit"><input type="number" id="hp_under" step="0.01" inputmode="decimal"><span>%</span></div></div>
           <div class="field"><label for="hp100">HP 100% 이하 적 데미지</label><div class="unit"><input type="number" id="hp100" step="0.01" inputmode="decimal"><span>%</span></div></div>
+          <div class="field"><label for="share_cho">초월 스킬 딜 점유율</label><div class="unit"><input type="number" id="share_cho" step="1" min="0" max="100" inputmode="decimal"><span>%</span></div></div>
         </div>
         <p class="hint" style="margin-top:10px">초월 점유율은 게임에서 보이는 딜 비중 기준이에요. 나머지는 강렬 스킬로 계산해요. 비교할 옵션과 상관없는 칸은 비워둬도 돼요.</p>
       </section>
@@ -313,6 +314,9 @@ function critFinal(s) {
 function maxiFinal(s) { return Math.min(1, s.maxi * prod(s.maxi_mults || []) + sum(s.maxi_adds || [])); }
 /* 극대화 배율 = 1 + 0.55·M·W·(1+Ps)/A, Ps = 2(Amax-A)/(1.1W) - 1  ->  무기 공격력 W가 약분돼 1 + M·(Amax-A)/A */
 function maxiMult(M, A, Amax) { return 1 + M * Math.max(0, Amax - A) / A; }
+/* 스텟형 물리/마법 공격력 % : 극대화 구간 길이 2(Amax-A) 를 무기 구간 길이 1.1W 로 나눈 값 - 1 (시트 <계산기>와 같은 식) */
+function statAtkPct(A, Amax, W) { return 2 * (Amax - A) / (1.1 * W) - 1; }
+const hasAtkPct = s => has(s, "A") && has(s, "A_max") && has(s, "W") && s.W > 0 && s.A > 0;
 function preShares(sg, sc, gang, cho) {
   const g = sg / (1 + gang), c = sc / (1 + cho);
   return g + c > 0 ? [g / (g + c), c / (g + c)] : [0, 1];
@@ -465,6 +469,7 @@ function resolve(win, cls, resist, st) {
 /* 옵션 종류: 라벨, 변화량 만들기, 필요한 스탯 묶음 */
 const KINDS = {
   boss: ["보스 데미지", v => ({ boss: v }), "boss"],
+  atk_pct: ["물리/마법 공격력 % (스텟)", v => ({ atk_pct: v }), "atk_pct"],
   cho: ["초월한 스킬 데미지", v => ({ cho: v }), "skill"],
   gang: ["강렬한 스킬 데미지", v => ({ gang: v }), "skill"],
   both: ["강렬 + 초월 스킬 데미지", v => ({ gang: v, cho: v }), "skill"],
@@ -481,6 +486,7 @@ const KINDS = {
 function missingFor(need, s) {
   if (need === "crit") return hasCrit(s) ? null : "크리티컬 확률과 크리티컬 데미지";
   if (need === "maxi") return hasMaxi(s) ? null : "극대화, 공격력, 최댓값";
+  if (need === "atk_pct") return has(s, "atk_pct") ? null : "공격력, 최댓값, 무기 공격력";
   if (need === "skill") return (has(s, "cho") || has(s, "gang")) ? null : "초월·강렬 스킬 데미지";
   return has(s, need) ? null : KINDS[need] ? KINDS[need][0] : need;
 }
@@ -606,7 +612,7 @@ function optimizeSockets(win, cls, resist, st, slots, per, cur) {
   };
   return { slots: N, used, counts, after, gain: dp[used] / curV - 1 };
 }
-if (typeof module !== "undefined") module.exports = { optimizeCkb, optimizeSockets, critFactor, maxiFactor, resolve, compare, critFinal, maxiFinal, dpsIndex, CLASS, FIELDS, critFromStat, statFromCrit, TOWN, encourage, engrave };
+if (typeof module !== "undefined") module.exports = { statAtkPct, optimizeCkb, optimizeSockets, critFactor, maxiFactor, resolve, compare, critFinal, maxiFinal, dpsIndex, CLASS, FIELDS, critFromStat, statFromCrit, TOWN, encourage, engrave };
 </script>
 
 <script id="ocr">
@@ -772,17 +778,17 @@ async function ocrShot(img, onStatus) {
 /* ===== 화면 ===== */
 (function () {
   const $ = id => document.getElementById(id);
-  const STAT_IDS = ["crit", "crit_dmg", "maxi", "A", "A_max", "boss", "all_skill", "cho", "gang", "share_cho", "polar", "add", "hp_over", "hp_under", "hp100"];
+  const STAT_IDS = ["crit", "crit_dmg", "maxi", "A", "A_max", "W", "boss", "all_skill", "cho", "gang", "share_cho", "polar", "add", "hp_over", "hp_under", "hp100"];
   const SETUP_IDS = ["town", "yellow", "pants", "shoes", "eng_kind_1", "eng_val_1", "eng_kind_2", "eng_val_2", "eng_kind_3", "eng_val_3", "enc_cdr", "enc_dur"];
   const TOOL_IDS = ["ckb_boss", "ckb_min", "sk_neb", "sk_slots", "sk_boss_target", "sk_per_crit", "sk_per_maxi", "sk_per_boss", "sk_per_boss2", "sk_per_all", "sk_per_cho", "sk_per_gang", "sk_per_both",
     "sk_cnt_empty", "sk_cnt_crit", "sk_cnt_maxi", "sk_cnt_boss", "sk_cnt_boss2", "sk_cnt_all", "sk_cnt_cho", "sk_cnt_gang", "sk_cnt_both"];
   const ALL_IDS = STAT_IDS.concat(SETUP_IDS, TOOL_IDS);
   const DEFAULTS = {
     cls: "트윈즈 피카로", field: "네블론 레이드",
-    crit: 83, crit_dmg: 199.4, maxi: 65.12, A: 124266, A_max: 169166, boss: 190, all_skill: 127.5, cho: 130.1, gang: 100.1,
-    share_cho: 95, polar: 59.2, add: 91.5, hp_over: 34, hp_under: 17, hp100: 41.5,
+    crit: 83, crit_dmg: 199.4, maxi: 65.12, A: 124266, A_max: 169166, W: 44020, boss: 190, all_skill: 127.5, cho: 130.1, gang: 100.1,
+    share_cho: 95, polar: 59.2, add: 91.5, hp_over: 34, hp_under: 34, hp100: 41.5,
     town: "온천 버프", yellow: "1", pants: 11, shoes: 11, eng_kind_1: "matk", eng_val_1: 5, eng_kind_2: "cd", eng_val_2: 5, eng_kind_3: "skill", eng_val_3: 5, enc_cdr: 30, enc_dur: 0,
-    ckb_boss: "2.5", ckb_min: 25, sk_neb: "0", sk_slots: 36, sk_boss_target: "boss", sk_per_crit: 6, sk_per_maxi: 6, sk_per_boss: 3, sk_per_boss2: 2.5, sk_per_all: 2, sk_per_cho: 2.5, sk_per_gang: 2.5, sk_per_both: 2, sk_cnt_crit: 12, sk_cnt_maxi: 8, sk_cnt_boss: 4, sk_cnt_boss2: 4, sk_cnt_cho: 8,
+    ckb_boss: "2.5", ckb_min: 25, sk_neb: "0", sk_slots: 38, sk_boss_target: "boss", sk_per_crit: 6, sk_per_maxi: 6, sk_per_boss: 3, sk_per_boss2: 2.5, sk_per_all: 2, sk_per_cho: 2.5, sk_per_gang: 2.5, sk_per_both: 2, sk_cnt_crit: 12, sk_cnt_maxi: 8, sk_cnt_boss: 4, sk_cnt_boss2: 4, sk_cnt_cho: 10,
     opts: [["힘트마", "boss", 6, ""], ["지트마", "cho", 5, ""], ["사냥석", "boss", 5, ""], ["기민석", "both", 4, ""], ["크리 마법석", "crit", 6, ""], ["극대 마법석", "maxi", 6, ""]],
   };
   const KEY = "elsword-spec-calc-v2";
@@ -827,7 +833,7 @@ async function ocrShot(img, onStatus) {
     for (const o of state.opts) addOptRow(...o);
   }
   function snapshot() {
-    const s = { cls: $("cls").value, field: $("field").value, opts: readOpts() };
+    const s = { v: 2, cls: $("cls").value, field: $("field").value, opts: readOpts() };
     for (const id of ALL_IDS) s[id] = $(id).value;
     return s;
   }
@@ -843,10 +849,11 @@ async function ocrShot(img, onStatus) {
 
     const win = {};
     for (const id of STAT_IDS) {
-      if (id === "A" || id === "A_max") { const v = num(id); if (v != null) win[id] = v; }
+      if (id === "A" || id === "A_max" || id === "W") { const v = num(id); if (v != null) win[id] = v; }
       else if (id === "share_cho") { const v = num(id); const c = v == null ? 85 : Math.min(100, Math.max(0, v)); win.share_cho = c; win.share_gang = 100 - c; }
       else { const v = pct(id); if (v != null) win[id] = v; }
     }
+    if (hasAtkPct(win)) win.atk_pct = statAtkPct(win.A, win.A_max, win.W);
     const z = id => Math.max(0, pct(id) || 0);
     const town = TOWN[$("town").value] || [0, 0], yellow = $("yellow").value === "1" ? 0.08 : 0;
     const pants = (2 + (num("pants") || 0)) / 100, shoes = (2 + (num("shoes") || 0)) / 100;
@@ -868,6 +875,7 @@ async function ocrShot(img, onStatus) {
     }
     if (hasMaxi(base)) tiles.push(["최종 극대화", fmt(maxiFinal(base), 1), `스탯창 ${fmt(win.maxi, 1)}`]);
     if (has(base, "boss")) tiles.push(["보스 데미지", fmt(base.boss, 1), `스탯창 ${fmt(win.boss, 1)}`]);
+    if (has(win, "atk_pct")) tiles.push(["공격력 % (스텟)", fmt(win.atk_pct, 2), win.atk_pct < 0 ? "값을 확인하세요" : "무기 공격력으로 역산"]);
     $("tiles").innerHTML = tiles.length ? tiles.map(t => `<div class="tile"><div class="k">${t[0]}</div><div class="v">${t[1]}</div><div class="from">${t[2]}</div></div>`).join("")
       : `<p class="hint">스탯창 값을 입력하면 버프와 패시브가 반영된 수치가 여기에 나와요.</p>`;
 
@@ -959,7 +967,7 @@ async function ocrShot(img, onStatus) {
       </ul>`;
   }
 
-  const SLOT_BASE = 36;
+  const SLOT_BASE = 38;
   const STONE_NAMES = { crit: "크리티컬", maxi: "극대화", boss: "힘트마 보뎀", boss2: "사냥석 보뎀", all: "모스뎀", cho: "초스뎀", gang: "강렬스뎀", both: "유강강초" };
   function renderSocket(win, cls, resist, setup) {
     const out = $("sk-out"), keys = Object.keys(STONE_NAMES), per = {}, cnt = {};
@@ -1032,6 +1040,8 @@ async function ocrShot(img, onStatus) {
   try {
     const saved = JSON.parse(localStorage.getItem(KEY) || "null");
     if (saved && CLASS[saved.cls] && FIELDS[saved.field] && Array.isArray(saved.opts)) {
+      if (saved.v !== 2 && +saved.sk_slots === 36 + (+saved.sk_neb || 0)) saved.sk_slots = SLOT_BASE + (+saved.sk_neb || 0);   // 기본 칸 수가 36 -> 38로 바뀜
+      if (!("W" in saved)) saved.W = "";   // 무기 공격력 칸이 없던 때의 저장값
       if (saved.sk_neb == null) saved.sk_slots = DEFAULTS.sk_slots;   // 예전 저장값: 전체 교체 기본으로 맞춤
       if (!("sk_cnt_boss2" in saved)) saved.sk_cnt_boss2 = "";   // 예전 저장값: 보뎀은 전부 힘트마 칸으로 저장돼 있음
       if (!("sk_cnt_crit" in saved)) for (const k of Object.keys(STONE_NAMES)) saved["sk_cnt_" + k] = "";   // 예전 저장값엔 칸 수가 없음
@@ -1069,15 +1079,22 @@ async function ocrShot(img, onStatus) {
       for (const k of Object.keys(r.found)) if (k !== "patk" && k !== "matk") vals[k] = r.found[k].value;
       const atk = r.found[type === "마법" ? "matk" : "patk"]; if (atk) vals.A = atk.value;
       let extra = "";
+      // 장비를 바꿔 끼며 싸우는 게 보통이라 HP 50% 초과·이하는 둘 중 높은 값으로 같게 넣음
+      if (vals.hp_over != null && vals.hp_under != null && vals.hp_over !== vals.hp_under) {
+        const hi = Math.max(vals.hp_over, vals.hp_under);
+        extra = ` HP 50% 초과·이하는 스크린샷에 ${vals.hp_over}% / ${vals.hp_under}%로 나와 있어서 높은 쪽 ${hi}%로 같게 넣었어요.`;
+        vals.hp_over = vals.hp_under = hi;
+      }
       if (r.range) {
-        if (r.range.type && r.range.type !== type) extra = ` 스크린샷의 툴팁은 ${r.range.type} 공격력 범위인데 전직은 ${type} 타입이라 최댓값은 넣지 않았어요.`;
+        if (r.range.type && r.range.type !== type) extra += ` 스크린샷의 툴팁은 ${r.range.type} 공격력 범위인데 전직은 ${type} 타입이라 최댓값은 넣지 않았어요.`;
         else if (vals.A == null || r.range.max >= vals.A) vals.A_max = r.range.max;
       }
       const got = Object.keys(SHOT_FIELDS).filter(k => vals[k] != null), miss = Object.keys(SHOT_FIELDS).filter(k => vals[k] == null);
       if (!got.length) { shotStatus(r.panel ? "상세 스탯 창은 찾았는데 수치를 읽지 못했어요. 창이 가려지지 않게 다시 찍어 보세요." : "상세 스탯 창을 찾지 못했어요. 상세 스탯 창이 보이게 찍은 스크린샷인지 확인하세요.", true); return; }
       clearFilled();
       for (const k of got) { const el = $(k); el.value = String(Math.round(vals[k] * 100) / 100); el.classList.add("filled"); }
-      if (miss.includes("A_max") && !extra) extra = " 극대화 최댓값은 주 공격력에 마우스를 올려 [공격력 범위] 툴팁이 보이게 찍어야 읽을 수 있어요.";
+      if ($("W").value === "") extra += " 무기 공격력은 스탯창에 없어서 직접 넣어야 해요.";
+      if (miss.includes("A_max") && !/최댓값은 넣지/.test(extra)) extra += " 극대화 최댓값은 주 공격력에 마우스를 올려 [공격력 범위] 툴팁이 보이게 찍어야 읽을 수 있어요.";
       shotStatus(`${got.length}개 칸을 채웠어요 (${type} 공격력 기준). 테두리가 표시된 칸이 읽은 값이니 스크린샷과 한 번 비교하세요.` +
         (miss.length ? ` 못 읽은 칸: ${miss.map(k => SHOT_FIELDS[k]).join(", ")}.` : "") + extra, miss.length > 0);
       render();
