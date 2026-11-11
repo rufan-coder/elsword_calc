@@ -9,9 +9,32 @@ const NAME = Object.fromEntries(STONES.map(s => [s.key, s.name]));
 // 마법석 종류 -> 그 마법석이 올리는 스탯창 값 (유강강초와 사냥석은 다른 줄에 합쳐서 보여 준다)
 const STAT_OF = { crit: "crit", maxi: "maxi", boss: "boss", all: "all_skill", cho: "cho", gang: "gang" };
 
-/** 네블론 개수를 바꾸면 전체 칸 수를 맞춰 준다 */
+const ATMA_NAMES = STONES.filter(s => s.atma).map(s => s.name.replace(" 보뎀", "")).join("·");
+const PLAIN_NAMES = STONES.filter(s => !s.atma).map(s => s.name).join("·");
+
+// "아트마 마법석 사용"은 사냥석 기준일 때만 고를 수 있다. 힘트마 기준이면 O로 고정해 잠근다.
+let atmaChoice = "0";   // 사냥석 기준에서 사용자가 골라 둔 값 (처음에는 X)
+
+/**
+ * 보뎀 기준에 맞춰 아트마 선택 칸을 잠그거나 푼다.
+ * byUser: 사용자가 기준을 직접 바꾼 경우 true. 저장값을 불러온 직후에는 false (불러온 값을 그대로 둔다)
+ */
+export function syncSocketControls(byUser = false) {
+  const atma = $("sk_atma"), hunting = $("sk_boss_target").value === "boss2";
+  if (!byUser) atmaChoice = "0";
+  if (hunting) {
+    if (byUser && atma.disabled) atma.value = atmaChoice;
+    atma.disabled = false;
+  } else {
+    if (byUser && !atma.disabled) atmaChoice = atma.value;
+    atma.value = "1"; atma.disabled = true;
+  }
+}
+
 export function initSocket() {
+  // 네블론 개수를 바꾸면 전체 칸 수를 맞춰 준다
   $("sk_neb").addEventListener("change", () => { $("sk_slots").value = SLOT_BASE + (num("sk_neb") || 0); });
+  $("sk_boss_target").addEventListener("change", () => syncSocketControls(true));
 }
 
 export function renderSocket({ job, resist, win, setup }) {
@@ -22,6 +45,14 @@ export function renderSocket({ job, resist, win, setup }) {
   const target = $("sk_boss_target").value === "boss2" ? "boss2" : "boss", other = target === "boss" ? "boss2" : "boss";
   const keepOther = per[other] > per[target] && count[other] > 0;
   per.bossTiers = [{ key: target, value: per[target], limit: Infinity }].concat(keepOther ? [{ key: other, value: per[other], limit: count[other] }] : []);
+
+  // 아트마 마법석을 안 쓰면: 아트마 종류는 새로 끼우지 않고, 지금 낀 칸 수까지만 그대로 둘 수 있다
+  const useAtma = target === "boss" || $("sk_atma").value === "1";
+  const limits = {};
+  if (!useAtma) for (const s of STONES) if (s.atma && s.key !== "boss") limits[s.key] = count[s.key];   // 힘트마는 위 bossTiers에서 이미 처리
+  $("sk-atma-note").textContent = target === "boss" ? "힘트마 기준에서는 아트마 마법석을 쓰는 것으로 계산해요."
+    : useAtma ? "아트마 마법석까지 모든 종류를 후보로 계산해요."
+    : `아트마 마법석(${ATMA_NAMES})은 새로 끼우지 않아요. 새로 끼우는 건 ${PLAIN_NAMES}뿐이고, 지금 낀 아트마 마법석은 그대로 둘 수 있어요.`;
 
   // 지금 낀 칸 수 x 한 칸 수치 = 먼저 빼야 하는 수치. 유강강초는 강렬·초월 양쪽에서 뺀다
   const current = {
@@ -45,7 +76,7 @@ export function renderSocket({ job, resist, win, setup }) {
     return;
   }
 
-  const r = optimizeSockets(win, job, resist, setup, slots, per, current);
+  const r = optimizeSockets(win, job, resist, setup, slots, per, current, limits);
   for (const k of KEYS) r.counts[k] = r.counts[k] || 0;
   if (!KEYS.some(k => r.counts[k] > 0)) { out.innerHTML = `<p class="warn">계산할 수 있는 마법석이 없어요. 스탯창 값과 한 칸 수치를 확인하세요.</p>`; return; }
 
@@ -73,6 +104,7 @@ export function renderSocket({ job, resist, win, setup }) {
         <li>지금 낀 마법석도 "한 칸 수치"와 같은 수치라고 보고 계산했어요. 실제 수치가 더 낮으면 상승률은 이보다 커요</li>
         <li>${keepOther ? `보뎀은 지금 낀 ${NAME[other]}(${trimPct(per[other])})은 그대로 두고, 새로 끼우는 칸만 ${NAME[target]}(${trimPct(per[target])})으로 계산했어요`
           : `보뎀은 전부 ${NAME[target]}(${trimPct(per[target])})으로 끼운다고 봤어요${count[other] > 0 ? `. 지금 낀 ${NAME[other]}도 교체 대상이에요` : ""}`}</li>
+        ${useAtma ? "" : `<li>아트마 마법석(${ATMA_NAMES})은 새로 끼우지 않고, 지금 낀 칸 수까지만 그대로 둘 수 있다고 봤어요</li>`}
         <li>유강강초는 한 칸에 강렬·초월 스뎀이 각각 그 수치만큼 오르는 마법석으로 계산했어요</li>
         <li>한 칸 수치를 0으로 두면 그 마법석은 후보에서 빠져요</li>
         ${r.used < r.slots ? `<li>${r.slots - r.used}칸은 채울 수 있는 마법석이 없어서 남겼어요</li>` : ""}

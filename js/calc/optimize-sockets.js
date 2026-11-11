@@ -15,9 +15,11 @@ const MAX_SLOTS = 60;
  * per : 한 칸 수치 { crit, maxi, boss, all, cho, gang, both }
  *       per.bossTiers 가 있으면 보뎀 마법석을 종류별로 쓴다: [{ key, value, limit }] (수치 높은 것부터 limit칸까지)
  * cur : 다시 배분할 칸에 지금 박혀 있어서 먼저 빼야 하는 수치의 합 { crit, maxi, boss, all, cho, gang }
+ * limits : 종류별로 쓸 수 있는 최대 칸 수 { all, cho, gang, both }. 없으면 제한 없음.
+ *          "새로는 못 끼우지만 지금 낀 만큼은 그대로 둘 수 있다"를 지금 낀 칸 수로 표현한다 (0이면 아예 못 씀)
  * 반환: { slots, used, counts: 종류별 칸 수, after: 채운 뒤 스탯창 값, gain: 지금 대비 DPS 상승률 }
  */
-export function optimizeSockets(win, job, critResist, setup, slots, per, cur) {
+export function optimizeSockets(win, job, critResist, setup, slots, per, cur, limits = {}) {
   const c = job || NO_PASSIVE;
   const N = Math.max(0, Math.min(MAX_SLOTS, Math.floor(slots || 0)));
   const p = k => Math.max(0, per[k] || 0), q = k => Math.max(0, cur[k] || 0);
@@ -32,25 +34,38 @@ export function optimizeSockets(win, job, critResist, setup, slots, per, cur) {
   const [Rg, Rc] = preShares(win.share_gang || 0, win.share_cho == null ? 1 : win.share_cho, gangNow, choNow);
   const gang = Math.max(0, gangNow - q("gang")), cho = Math.max(0, choNow - q("cho"));
 
-  // 강렬·초월 배율은 칸 수에 대해 직선이라, 셋(초스뎀·강렬스뎀·유강강초) 중 한 칸당 이득이 가장 큰 하나에 몰아 주는 게 최선
-  const skillPick = [["cho", Rc * p("cho")], ["gang", Rg * p("gang")], ["both", (Rc + Rg) * p("both")]].sort((x, y) => y[1] - x[1])[0];
+  const limitOf = k => (limits[k] == null ? Infinity : Math.max(0, limits[k]));
 
-  // 보뎀 마법석 종류: 수치 높은 것부터 limit칸까지 쓴다 (지금 낀 더 좋은 마법석은 그대로 두는 경우를 표현)
-  const tiers = (per.bossTiers || [{ key: "boss", value: p("boss"), limit: Infinity }]).filter(t => t.value > 0 && t.limit > 0).sort((x, y) => y.value - x.value);
-  const bossCap = tiers.reduce((s, t) => s + t.limit, 0);
-  const bossSplit = n => {
-    const out = {}; let add = 0;
-    for (const t of tiers) { const k = Math.min(n, t.limit); out[t.key] = k; add += k * t.value; n -= k; }
-    return { out, add };
+  // 한 묶음 안에 마법석 종류가 여럿일 때: 한 칸당 이득이 큰 종류부터 그 종류의 한도까지 채운다.
+  // 배율이 칸 수에 대해 직선인 묶음(보뎀, 강렬·초월)에서는 이게 곧 최선이다.
+  const ladder = kinds => {
+    const tiers = kinds.filter(t => t.value > 0 && t.limit > 0).sort((x, y) => y.value - x.value);
+    return {
+      any: tiers.length > 0,
+      cap: tiers.reduce((s, t) => s + t.limit, 0),
+      split(n) {
+        const out = {}; let add = 0;
+        for (const t of tiers) { const k = Math.min(n, t.limit); out[t.key] = k; add += k * t.value; n -= k; }
+        return { out, add };
+      },
+    };
   };
+  // 보뎀: 힘트마·사냥석처럼 수치가 다른 종류 (지금 낀 더 좋은 마법석은 그대로 두는 경우를 limit으로 표현)
+  const bossLadder = ladder(per.bossTiers || [{ key: "boss", value: p("boss"), limit: Infinity }]);
+  // 강렬·초월: 초스뎀·강렬스뎀·유강강초. value는 강렬·초월 배율에 더해지는 한 칸당 이득
+  const skillLadder = ladder([
+    { key: "cho", value: Rc * p("cho"), limit: limitOf("cho") },
+    { key: "gang", value: Rg * p("gang"), limit: limitOf("gang") },
+    { key: "both", value: (Rc + Rg) * p("both"), limit: limitOf("both") },
+  ]);
 
   // 스탯 묶음: on = 후보인지, fill(n) = n칸 채웠을 때 배율, now() = 지금 배율
   const groups = [
     { key: "crit", on: ok.crit && p("crit") > 0, fill: n => critFactor(win, job, critResist, setup, critFromStat(critStat + n * p("crit"))), now: () => critFactor(win, job, critResist, setup, win.crit) },
     { key: "maxi", on: ok.maxi && p("maxi") > 0, fill: n => maxiFactor(win, job, critResist, setup, maxiFromStat(maxiStat + n * p("maxi"))), now: () => maxiFactor(win, job, critResist, setup, win.maxi) },
-    { key: "boss", on: ok.boss && tiers.length > 0, cap: bossCap, fill: n => 1 + bossFixed + boss + bossSplit(n).add, now: () => 1 + bossFixed + win.boss },
-    { key: "all", on: ok.all && p("all") > 0, fill: n => 1 + all + n * p("all"), now: () => 1 + win.all_skill },
-    { key: "skill", on: ok.skill && skillPick[1] > 0, fill: n => Rc * (1 + cho) + Rg * (1 + gang) + n * skillPick[1], now: () => Rc * (1 + choNow) + Rg * (1 + gangNow) },
+    { key: "boss", on: ok.boss && bossLadder.any, cap: bossLadder.cap, fill: n => 1 + bossFixed + boss + bossLadder.split(n).add, now: () => 1 + bossFixed + win.boss },
+    { key: "all", on: ok.all && p("all") > 0 && limitOf("all") > 0, cap: limitOf("all"), fill: n => 1 + all + n * p("all"), now: () => 1 + win.all_skill },
+    { key: "skill", on: ok.skill && skillLadder.any, cap: skillLadder.cap, fill: n => Rc * (1 + cho) + Rg * (1 + gang) + skillLadder.split(n).add, now: () => Rc * (1 + choNow) + Rg * (1 + gangNow) },
   ];
   const have = { crit: ok.crit, maxi: ok.maxi, boss: ok.boss, all: ok.all, skill: ok.skill };
   let current = 1;
@@ -81,8 +96,8 @@ export function optimizeSockets(win, job, critResist, setup, slots, per, cur) {
   let n = used, bossAdd = 0;
   for (let gi = groups.length - 1; gi >= 0; gi--) {
     const k = choice[gi][n]; n -= k;
-    if (groups[gi].key === "skill") counts[skillPick[0]] = k;
-    else if (groups[gi].key === "boss") { const s = bossSplit(k); Object.assign(counts, s.out); bossAdd = s.add; }
+    if (groups[gi].key === "skill") Object.assign(counts, skillLadder.split(k).out);
+    else if (groups[gi].key === "boss") { const s = bossLadder.split(k); Object.assign(counts, s.out); bossAdd = s.add; }
     else counts[groups[gi].key] = k;
   }
 

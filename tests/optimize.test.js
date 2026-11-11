@@ -35,21 +35,23 @@ test("소켓 한 칸의 가치: 시트의 '효율(상승배율)' 7개 값과 일
   }
 });
 
-// 모든 조합을 하나씩 세는 느린 방법. 동적 계획법 결과가 이것과 같아야 한다
-function bruteForce(win, job, resist, setup, slots, cur) {
+// 모든 조합을 하나씩 세는 느린 방법. 동적 계획법 결과가 이것과 같아야 한다.
+// limits: 종류별 최대 칸 수 (없으면 제한 없음)
+function bruteForce(win, job, resist, setup, slots, cur, limits = {}) {
   const [Rg, Rc] = preShares(win.share_gang, win.share_cho, win.gang, win.cho);
   const bossFixed = setup.guild_boss + job.boss;
   const value = (n, removed) =>
     critFactor(win, job, resist, setup, critFromStat(statFromCrit(win.crit) - (removed.crit || 0) + n.crit * PER.crit)) *
     maxiFactor(win, job, resist, setup, maxiFromStat(statFromMaxi(win.maxi) - (removed.maxi || 0) + n.maxi * PER.maxi)) *
     (1 + bossFixed + win.boss - (removed.boss || 0) + n.boss * PER.boss) *
-    (1 + win.all_skill + n.all * PER.all) *
-    (Rc * (1 + win.cho - (removed.cho || 0) + n.cho * PER.cho + n.both * PER.both) + Rg * (1 + win.gang + n.gang * PER.gang + n.both * PER.both));
+    (1 + win.all_skill - (removed.all || 0) + n.all * PER.all) *
+    (Rc * (1 + win.cho - (removed.cho || 0) + n.cho * PER.cho + n.both * PER.both) + Rg * (1 + win.gang - (removed.gang || 0) + n.gang * PER.gang + n.both * PER.both));
   const keys = Object.keys(PER);
   let best = -1;
   const walk = (i, left, n) => {
-    if (i === keys.length - 1) { n[keys[i]] = left; best = Math.max(best, value(n, cur)); return; }
-    for (let k = 0; k <= left; k++) { n[keys[i]] = k; walk(i + 1, left - k, n); }
+    const max = limits[keys[i]] == null ? Infinity : limits[keys[i]];
+    if (i === keys.length - 1) { if (left <= max) { n[keys[i]] = left; best = Math.max(best, value(n, cur)); } return; }
+    for (let k = 0; k <= Math.min(left, max); k++) { n[keys[i]] = k; walk(i + 1, left - k, n); }
   };
   walk(0, slots, {});
   return best / value({ crit: 0, maxi: 0, boss: 0, all: 0, cho: 0, gang: 0, both: 0 }, {}) - 1;
@@ -73,6 +75,29 @@ test("소켓 최적화: 지금 낀 더 좋은 보뎀 마법석은 그대로 둔�
   const r = optimizeSockets(win, job, resist, setup, 36, per, cur);
   assert.equal(r.counts.boss, 4);      // 힘트마 4칸은 유지
   assert.ok(r.gain >= 0);
+});
+
+test("소켓 최적화: 종류별 한도를 걸어도 직접 센 결과와 같다 (아트마 마법석을 새로 안 끼우는 경우)", () => {
+  const { job, resist, setup } = PICARO;
+  const win = { ...PICARO.win, all_skill: 1.28 };
+  const cases = [
+    // 지금 초스뎀 3칸·유강강초 2칸이 끼워져 있고, 그 이상은 못 늘린다
+    [10, { crit: 0.12, cho: 3 * 0.025 + 2 * 0.02, gang: 2 * 0.02 }, { all: 0, cho: 3, gang: 0, both: 2 }],
+    // 아트마 마법석이 하나도 없는 경우: 크리·극대·보뎀만 쓴다
+    [8, { crit: 0.24, maxi: 0.12 }, { all: 0, cho: 0, gang: 0, both: 0 }],
+    [12, {}, { all: 1, cho: 0, gang: 4, both: 0 }],
+  ];
+  for (const [slots, cur, limits] of cases) {
+    const r = optimizeSockets(win, job, resist, setup, slots, PER, cur, limits);
+    near(r.gain, bruteForce(win, job, resist, setup, slots, cur, limits), 9);
+    for (const [k, max] of Object.entries(limits)) assert.ok(r.counts[k] <= max, `${k} ${r.counts[k]}칸 > 한도 ${max}`);
+  }
+});
+
+test("소켓 최적화: 한도 때문에 채울 수 있는 종류가 없으면 칸을 남긴다", () => {
+  const { job, resist, setup } = PICARO;
+  const r = optimizeSockets({ boss: 1.9, cho: 1.3, gang: 1.0, share_cho: 100, share_gang: 0 }, job, resist, setup, 6, { cho: 0.025 }, {}, { cho: 2 });
+  assert.equal(r.counts.cho, 2); assert.equal(r.used, 2);
 });
 
 test("소켓 최적화: 후보에서 뺀 마법석(한 칸 수치 0)은 쓰지 않는다", () => {

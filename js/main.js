@@ -8,7 +8,7 @@ import { initInputs, readInputs } from "./ui/inputs.js";
 import { renderSummary } from "./ui/summary.js";
 import { initCompare, renderCompare } from "./ui/compare-view.js";
 import { renderCkb } from "./ui/ckb-view.js";
-import { initSocket, renderSocket } from "./ui/socket-view.js";
+import { initSocket, renderSocket, syncSocketControls } from "./ui/socket-view.js";
 import { initScreenshot, clearFilled } from "./ui/screenshot-view.js";
 import { resolve } from "./calc/stats.js";
 
@@ -50,6 +50,7 @@ loadState(DEFAULTS);
 defaultSnapshot = JSON.stringify(snapshot());
 const saved = readSaved();
 if (saved) loadState(saved);
+syncSocketControls();
 
 const wrap = document.querySelector(".wrap");
 wrap.addEventListener("input", render);
@@ -57,7 +58,7 @@ wrap.addEventListener("change", render);
 initCompare(render);
 initSocket();
 initScreenshot(render);
-$("reset").addEventListener("click", () => { loadState(DEFAULTS); clearFilled(); render(); });
+$("reset").addEventListener("click", () => { loadState(DEFAULTS); syncSocketControls(); clearFilled(); render(); });
 document.querySelector(".tabs").addEventListener("click", e => {
   const b = e.target.closest('[role="tab"]');
   if (b) { setTab(b.id.slice(4)); render(); }

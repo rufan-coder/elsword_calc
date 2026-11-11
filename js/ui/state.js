@@ -11,7 +11,7 @@ export const STAT_IDS = ["crit", "crit_dmg", "maxi", "A", "A_max", "W", "boss", 
 /** 버프 세팅 입력칸 */
 const SETUP_IDS = ["town", "yellow", "pants", "shoes", "eng_kind_1", "eng_val_1", "eng_kind_2", "eng_val_2", "eng_kind_3", "eng_val_3", "enc_cdr", "enc_dur"];
 /** 크극·소켓 최적화 탭의 입력칸 */
-const TOOL_IDS = ["ckb_boss", "ckb_min", "sk_neb", "sk_slots", "sk_boss_target",
+const TOOL_IDS = ["ckb_boss", "ckb_min", "sk_neb", "sk_slots", "sk_boss_target", "sk_atma",
   ...STONES.map(s => "sk_per_" + s.key), "sk_cnt_empty", ...STONES.map(s => "sk_cnt_" + s.key)];
 const ALL_IDS = STAT_IDS.concat(SETUP_IDS, TOOL_IDS);
 
@@ -22,7 +22,7 @@ export const DEFAULTS = {
   share_cho: 95, polar: 59.2, add: 91.5, hp_over: 34, hp_under: 34, hp100: 41.5,
   town: "온천 버프", yellow: "1", pants: 11, shoes: 11,
   eng_kind_1: "matk", eng_val_1: 5, eng_kind_2: "cd", eng_val_2: 5, eng_kind_3: "skill", eng_val_3: 5, enc_cdr: 30, enc_dur: 0,
-  ckb_boss: "2.5", ckb_min: 25, sk_neb: "0", sk_slots: SLOT_BASE, sk_boss_target: "boss",
+  ckb_boss: "2.5", ckb_min: 25, sk_neb: "0", sk_slots: SLOT_BASE, sk_boss_target: "boss", sk_atma: "1",   // 힘트마 기준이면 아트마 사용은 O로 고정
   ...Object.fromEntries(STONES.map(s => ["sk_per_" + s.key, s.percent])),
   sk_cnt_crit: 12, sk_cnt_maxi: 8, sk_cnt_boss: 4, sk_cnt_boss2: 4, sk_cnt_cho: 10,
   opts: [["힘트마", "boss", 6, ""], ["지트마", "cho", 5, ""], ["사냥석", "boss", 5, ""], ["기민석", "both", 4, ""], ["크리 마법석", "crit", 6, ""], ["극대 마법석", "maxi", 6, ""]],
