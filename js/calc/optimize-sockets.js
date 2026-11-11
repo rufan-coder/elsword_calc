@@ -15,8 +15,7 @@ const MAX_SLOTS = 60;
  * per : 한 칸 수치 { crit, maxi, boss, all, cho, gang, both }
  *       per.bossTiers 가 있으면 보뎀 마법석을 종류별로 쓴다: [{ key, value, limit }] (수치 높은 것부터 limit칸까지)
  * cur : 다시 배분할 칸에 지금 박혀 있어서 먼저 빼야 하는 수치의 합 { crit, maxi, boss, all, cho, gang }
- * limits : 종류별로 쓸 수 있는 최대 칸 수 { all, cho, gang, both }. 없으면 제한 없음.
- *          "새로는 못 끼우지만 지금 낀 만큼은 그대로 둘 수 있다"를 지금 낀 칸 수로 표현한다 (0이면 아예 못 씀)
+ * limits : 종류별로 쓸 수 있는 최대 칸 수 { all, cho, gang, both }. 없으면 제한 없음, 0이면 그 종류는 아예 못 쓴다
  * 반환: { slots, used, counts: 종류별 칸 수, after: 채운 뒤 스탯창 값, gain: 지금 대비 DPS 상승률 }
  */
 export function optimizeSockets(win, job, critResist, setup, slots, per, cur, limits = {}) {

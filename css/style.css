@@ -99,6 +99,7 @@ input.check { border-color: var(--warn); box-shadow: inset 0 0 0 1px var(--warn)
 .pane { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 .pane[hidden] { display: none; }
 table.sk { margin-top: 14px; } table.sk td { border-top: 0; padding: 3px 8px 3px 0; } table.sk td:last-child, table.sk th:last-child { padding-right: 0; }
+table.sk tr.off { opacity: .45; }
 table.sk td.lbl { white-space: nowrap; font-size: 13px; } table.sk .unit { min-width: 76px; }
 .out { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
 td.up { color: var(--best); font-weight: 700; } td.muted { color: var(--muted); }
