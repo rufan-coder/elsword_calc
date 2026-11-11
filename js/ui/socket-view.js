@@ -1,6 +1,6 @@
 // "소켓 최적화" 탭.
 
-import { $, num, fmt, signed, arrowCells, pctOrZero, trimPct } from "./dom.js";
+import { $, num, signed, arrowCells, pctOrZero, trimPct } from "./dom.js";
 import { STONES, SLOT_BASE } from "../data/stones.js";
 import { optimizeSockets } from "../calc/optimize-sockets.js";
 
@@ -43,18 +43,16 @@ export function renderSocket({ job, resist, win, setup }) {
 
   // 보뎀: 고른 기준 마법석으로 새로 끼우고, 지금 낀 다른 쪽이 더 좋은 수치면 그건 그대로 둔다
   const target = $("sk_boss_target").value === "boss2" ? "boss2" : "boss", other = target === "boss" ? "boss2" : "boss";
-  // 아트마 마법석을 안 쓰면(사냥석 기준에서만 고를 수 있다) 아트마 종류는 아예 못 쓴다: 지금 낀 것도 빼고 나머지로 다시 채운다
-  const useAtma = target === "boss" || $("sk_atma").value === "1";
-  const keepOther = useAtma && per[other] > per[target] && count[other] > 0;
+  const keepOther = per[other] > per[target] && count[other] > 0;
   per.bossTiers = [{ key: target, value: per[target], limit: Infinity }].concat(keepOther ? [{ key: other, value: per[other], limit: count[other] }] : []);
 
+  // 아트마 마법석을 안 쓰면: 아트마 종류는 새로 끼우지 않고, 지금 낀 칸 수까지만 그대로 둘 수 있다
+  const useAtma = target === "boss" || $("sk_atma").value === "1";
   const limits = {};
-  if (!useAtma) for (const s of STONES) if (s.atma && s.key !== "boss") limits[s.key] = 0;   // 힘트마는 위 bossTiers에서 이미 빠졌다
+  if (!useAtma) for (const s of STONES) if (s.atma && s.key !== "boss") limits[s.key] = count[s.key];   // 힘트마는 위 bossTiers에서 이미 처리
   $("sk-atma-note").textContent = target === "boss" ? "힘트마 기준에서는 아트마 마법석을 쓰는 것으로 계산해요."
     : useAtma ? "아트마 마법석까지 모든 종류를 후보로 계산해요."
-    : `아트마 마법석(${ATMA_NAMES})은 쓰지 않고 ${PLAIN_NAMES}으로만 채워요. 지금 낀 아트마 마법석이 있으면 그것도 빼고 계산해요.`;
-  // 못 쓰는 종류의 줄은 흐리게 표시
-  for (const s of STONES) $("sk_per_" + s.key).closest("tr").classList.toggle("off", !useAtma && !!s.atma);
+    : `아트마 마법석(${ATMA_NAMES})은 새로 끼우지 않아요. 새로 끼우는 건 ${PLAIN_NAMES}뿐이고, 지금 낀 아트마 마법석은 그대로 둘 수 있어요.`;
 
   // 지금 낀 칸 수 x 한 칸 수치 = 먼저 빼야 하는 수치. 유강강초는 강렬·초월 양쪽에서 뺀다
   const current = {
@@ -87,10 +85,8 @@ export function renderSocket({ job, resist, win, setup }) {
   let verdict;
   if (!minus.length && !plus.length) verdict = `지금 구성이 이미 최적이에요. 바꿀 필요가 없어요.`;
   else if (!minus.length) verdict = `빈 ${empty}칸에 <b>${list(plus)}</b>을 끼우면 DPS가 <b>${signed(r.gain)}</b> 올라요.`;
-  else if (r.gain > 0.00005) verdict = `${list(minus)}을 빼고 <b>${list(plus)}</b>을 끼우면 DPS가 <b>${signed(r.gain)}</b> 올라요.`;
-  else if (r.gain > -0.00005) verdict = `${list(minus)}을 ${list(plus)}으로 바꿔도 DPS가 같아요. 지금 구성 그대로 둬도 돼요.`;
-  // 못 쓰는 마법석을 빼야 해서 지금보다 낮아지는 경우
-  else verdict = `${useAtma ? "" : "아트마 마법석 없이는 "}${list(minus)}을 빼고 <b>${list(plus)}</b>을 끼우는 구성이 가장 좋아요. 지금보다 DPS가 <b>${fmt(-r.gain)}</b> 낮아져요.`;
+  else if (r.gain < 0.00005) verdict = `${list(minus)}을 ${list(plus)}으로 바꿔도 DPS가 같아요. 지금 구성 그대로 둬도 돼요.`;
+  else verdict = `${list(minus)}을 빼고 <b>${list(plus)}</b>을 끼우면 DPS가 <b>${signed(r.gain)}</b> 올라요.`;
 
   const row = k => {
     const d = r.counts[k] - count[k], stat = STAT_OF[k];
@@ -108,7 +104,7 @@ export function renderSocket({ job, resist, win, setup }) {
         <li>지금 낀 마법석도 "한 칸 수치"와 같은 수치라고 보고 계산했어요. 실제 수치가 더 낮으면 상승률은 이보다 커요</li>
         <li>${keepOther ? `보뎀은 지금 낀 ${NAME[other]}(${trimPct(per[other])})은 그대로 두고, 새로 끼우는 칸만 ${NAME[target]}(${trimPct(per[target])})으로 계산했어요`
           : `보뎀은 전부 ${NAME[target]}(${trimPct(per[target])})으로 끼운다고 봤어요${count[other] > 0 ? `. 지금 낀 ${NAME[other]}도 교체 대상이에요` : ""}`}</li>
-        ${useAtma ? "" : `<li>아트마 마법석(${ATMA_NAMES})은 쓰지 않는 것으로 계산했어요. 지금 낀 칸 수에 적혀 있는 것도 빼고 다시 채웠어요</li>`}
+        ${useAtma ? "" : `<li>아트마 마법석(${ATMA_NAMES})은 새로 끼우지 않고, 지금 낀 칸 수까지만 그대로 둘 수 있다고 봤어요</li>`}
         <li>유강강초는 한 칸에 강렬·초월 스뎀이 각각 그 수치만큼 오르는 마법석으로 계산했어요</li>
         <li>한 칸 수치를 0으로 두면 그 마법석은 후보에서 빠져요</li>
         ${r.used < r.slots ? `<li>${r.slots - r.used}칸은 채울 수 있는 마법석이 없어서 남겼어요</li>` : ""}
