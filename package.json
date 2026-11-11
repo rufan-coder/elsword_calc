@@ -1,0 +1,11 @@
+{
+  "name": "elsword-calc",
+  "version": "1.0.0",
+  "description": "엘소드 스탯창 값으로 옵션별 DPS 상승률을 비교하고 크극·소켓 배분을 최적화하는 계산기",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "node --test",
+    "start": "npx --yes serve ."
+  }
+}
