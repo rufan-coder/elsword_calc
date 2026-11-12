@@ -3,6 +3,7 @@
 import { $, fmt, trimPct } from "./dom.js";
 import { CLASS_NOTES } from "../data/classes.js";
 import { has, hasCrit, hasMaxi, critFinal, maxiFinal } from "../calc/stats.js";
+import { chomokGain } from "../calc/chomok.js";
 
 function passiveText(stat, mult, add) {
   const parts = [];
@@ -13,7 +14,7 @@ function passiveText(stat, mult, add) {
 }
 const short = x => (x * 100).toFixed(1).replace(/\.0$/, "");
 
-export function renderSummary({ cls, job, resist, win, base, buffs }) {
+export function renderSummary({ cls, job, resist, win, base, setup, buffs }) {
   // 전직·던전 안내
   $("field-info").textContent = `· 크리저항 ${Math.round(resist * 100)}%`;
   $("cls-info").textContent = `${job.type} · 공격력 ${job.tier}티어 · 패시브: 크확 ${passiveText(job.crit_s, job.crit_m, job.crit_a)}, 극대 ${passiveText(job.maxi_s, job.maxi_m, job.maxi_a)}, 크뎀 +${short(job.cd_s)}%` + (job.boss ? `, 보뎀 +${short(job.boss)}%` : "");
@@ -31,9 +32,12 @@ export function renderSummary({ cls, job, resist, win, base, buffs }) {
     tiles.push(["크리티컬 데미지", fmt(base.crit_dmg, 1), `스탯창 ${fmt(win.crit_dmg, 1)}`]);
   }
   if (hasMaxi(base)) tiles.push(["최종 극대화", fmt(maxiFinal(base), 1), `스탯창 ${fmt(win.maxi, 1)}`]);
-  if (has(base, "boss")) tiles.push(["보스 데미지", fmt(base.boss, 1), `스탯창 ${fmt(win.boss, 1)}`]);
   if (has(win, "atk_pct")) tiles.push(["공격력 % (스텟)", fmt(win.atk_pct, 2), win.atk_pct < 0 ? "값을 확인하세요" : "무기 공격력으로 역산"]);
+  // 초목: 크뎀 곱연산 30%를 얻고 보뎀 한 칸을 뺐을 때. "사냥석 뺀 기준/힘트마 뺀 기준"
+  const chomok = chomokGain(win, job, resist, setup);
+  if (chomok) tiles.push(["초목 효율", `${fmt(chomok.hunt)}/${fmt(chomok.atma)}`, "사냥석 뺀 / 힘트마 뺀", "chomok",
+    "크뎀 곱연산 30%를 얻고 보뎀 사냥석(2.5%) 또는 힘트마(3%) 한 칸을 뺐을 때의 DPS 상승률"]);
   $("tiles").innerHTML = tiles.length
-    ? tiles.map(t => `<div class="tile"><div class="k">${t[0]}</div><div class="v">${t[1]}</div><div class="from">${t[2]}</div></div>`).join("")
+    ? tiles.map(t => `<div class="tile${t[3] ? " " + t[3] : ""}"${t[4] ? ` title="${t[4]}"` : ""}><div class="k">${t[0]}</div><div class="v">${t[1]}</div><div class="from">${t[2]}</div></div>`).join("")
     : `<p class="hint">스탯창 값을 입력하면 버프와 패시브가 반영된 수치가 여기에 나와요.</p>`;
 }
