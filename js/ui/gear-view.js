@@ -2,7 +2,7 @@
 // 캐릭터 창 스크린샷을 올리면 아이콘을 알아봐서 "지금" 칸을 채운다.
 
 import { $, esc, signed } from "./dom.js";
-import { ACC_SLOTS, ACCESSORIES, NEW_ACCESSORIES, ARMOR_AVATARS, NEW_ARMOR_SETS, WEAPON_AVATARS, OUTFITS, ATMA, AVATAR_SET_LIMIT } from "../data/accessories.js";
+import { ACC_SLOTS, ACCESSORIES, NEW_ACCESSORIES, ARMOR_AVATARS, WEAPON_AVATARS, OUTFITS, WEAPONS, ATMA, AVATAR_SET_LIMIT } from "../data/accessories.js";
 import { ICONS } from "../data/icons.js";
 import { compareGear, emptyGear, STAT_NAMES, IGNORED } from "../calc/gear.js";
 import { findCharWindow, equipCells } from "../ocr/equip-window.js";
@@ -13,11 +13,15 @@ const ALL_ACC = [...ACCESSORIES, ...NEW_ACCESSORIES];
 const SAME = "=";   // "바꿔 보기"에서 그대로
 
 // ----- 화면에 그릴 줄 -----
-const ROWS = [
-  { group: "avatar", title: "아바타 악세", slots: ACC_SLOTS.map(s => [s.key, s.name]) },
-  { group: "normal", title: "일반 악세", slots: ACC_SLOTS.filter(s => s.key !== "ring").map(s => [s.key, s.name]).concat([["ring", "반지 1"], ["ring2", "반지 2"]]) },
-  { group: "wear", title: "아바타", slots: [["outfit", "한 벌"], ["hair", "헤어"], ["top", "상의"], ["bottom", "하의"], ["gloves", "장갑"], ["shoes", "신발"], ["wavatar", "무기 아바타"]] },
+const slotName = s => (s.key === "weapon" ? "무기 악세" : s.name);   // 무기 아바타·무기 종류와 헷갈리지 않게
+// 줄 하나: [묶음, 부위, 이름]. 묶음 wear 는 한 벌·5셋(레어 아바타 다섯 부위)·무기 아바타
+const TABLES = [
+  { title: "무기", rows: [["weapon", "weapon", "무기 종류"]] },
+  { title: "아바타 악세", rows: [["wear", "outfit", "한 벌"], ["wear", "set5", "5셋"], ["wear", "wavatar", "무기 아바타"], ...ACC_SLOTS.map(s => ["avatar", s.key, slotName(s)])] },
+  { title: "일반 악세", atma: true, rows: ACC_SLOTS.filter(s => s.key !== "ring").map(s => ["normal", s.key, slotName(s)]).concat([["normal", "ring", "반지 1"], ["normal", "ring2", "반지 2"]]) },
 ];
+const ROWS = TABLES.flatMap(t => t.rows);
+const ARMOR_PIECES = ["hair", "top", "bottom", "gloves", "shoes"];
 const ATMA_GRADED = ATMA.pieces.filter(s => s !== "top");   // 만다라는 등급이 이름에 들어 있다
 const SET_GRADES = ATMA.grades.slice(ATMA.grades.indexOf(ATMA.maxGrade));
 
@@ -28,15 +32,21 @@ function shortName(name) {
   return name;
 }
 
-/** (묶음, 부위)에 고를 수 있는 것: [[값, 표시 이름]] */
+/**
+ * (묶음, 부위)에 고를 수 있는 것: [[값, 표시 이름]].
+ * 데이터는 시트 순서(오래된 것부터)라, 최근에 나온 것이 위에 오도록 뒤집는다
+ */
 function choices(group, slot) {
+  if (group === "weapon") return WEAPONS.map(w => [w.name, w.set ? `${w.name} (${w.set})` : w.name]);
+  let list;
   if (group === "avatar" || group === "normal") {
     const s = slot === "ring2" ? "ring" : slot;
-    return ALL_ACC.filter(a => a.layer === group && a.slot === s).map(a => [a.name, shortName(a.name) + (a.unknown ? " (수치 모름)" : "")]);
+    list = ALL_ACC.filter(a => a.layer === group && a.slot === s).map(a => [a.name, shortName(a.name) + (a.unknown ? " (수치 모름)" : "")]);
   }
-  if (slot === "outfit") return OUTFITS.map(o => [o.name, o.name]);
-  if (slot === "wavatar") return WEAPON_AVATARS.map(w => [w.name, w.name]);
-  return Object.keys(ARMOR_AVATARS).map(n => [n, n]).concat(NEW_ARMOR_SETS.map(n => [n, n + " (수치 모름)"]));
+  else if (slot === "outfit") list = OUTFITS.map(o => [o.name, o.name]);
+  else if (slot === "wavatar") list = WEAPON_AVATARS.map(w => [w.name, w.name]);
+  else list = Object.keys(ARMOR_AVATARS).map(n => [n, n]);
+  return list.reverse();
 }
 
 const sel = (side, group, slot) => $(`gear-${side}-${group}-${slot}`);
@@ -44,22 +54,25 @@ const options = (list, first) => first.concat(list).map(([v, t]) => `<option val
 
 function buildTables() {
   let html = "";
-  for (const row of ROWS) {
-    html += `<div class="sub">${row.title}</div><div class="tbl-wrap"><table class="gear"><thead><tr><th>부위</th><th>지금</th><th>바꿔 보기</th></tr></thead><tbody>`;
-    if (row.group === "normal") {
+  for (const table of TABLES) {
+    html += `<div class="sub">${table.title}</div><div class="tbl-wrap"><table class="gear"><thead><tr><th>부위</th><th>지금</th><th>바꿔 보기</th></tr></thead><tbody>`;
+    if (table.atma) {
       const els = ATMA.elements.map(e => [e, e]);
       html += `<tr class="atma"><td class="lbl">아트마 속성</td>` +
         `<td><div class="pick"><select id="gear-now-element" aria-label="지금 아트마 속성">${options(els, [])}</select></div></td>` +
         `<td class="next"><div class="pick"><select id="gear-next-element" aria-label="바꿔 볼 아트마 속성">${options(els, [[SAME, "그대로"]])}</select></div></td></tr>`;
     }
-    for (const [slot, name] of row.slots) {
-      const list = choices(row.group, slot), grade = row.group === "normal" && ATMA_GRADED.includes(slot);
+    for (const [group, slot, name] of table.rows) {
+      const list = choices(group, slot), grade = group === "normal" && ATMA_GRADED.includes(slot);
       const gradeSel = side => grade ? `<select class="grade" id="gear-${side}-grade-${slot}" aria-label="${name} 아트마 등급" hidden>${options(SET_GRADES.map(g => [g, g]), side === "next" ? [[SAME, "그대로"]] : [])}</select>` : "";
+      const none = group === "weapon" ? "그 밖의 무기" : "미착용";
       html += `<tr><td class="lbl">${name}</td>` +
-        `<td><div class="pick"><select id="gear-now-${row.group}-${slot}" aria-label="지금 ${row.title} ${name}">${options(list, [["", "미착용"]])}</select>${gradeSel("now")}</div></td>` +
-        `<td class="next"><div class="pick"><select id="gear-next-${row.group}-${slot}" aria-label="바꿔 볼 ${row.title} ${name}">${options(list, [[SAME, "그대로"], ["", "미착용"]])}</select>${gradeSel("next")}</div></td></tr>`;
+        `<td><div class="pick"><select id="gear-now-${group}-${slot}" aria-label="지금 ${table.title} ${name}">${options(list, [["", none]])}</select>${gradeSel("now")}</div></td>` +
+        `<td class="next"><div class="pick"><select id="gear-next-${group}-${slot}" aria-label="바꿔 볼 ${table.title} ${name}">${options(list, [[SAME, "그대로"], ["", none]])}</select>${gradeSel("next")}</div></td></tr>`;
     }
     html += `</tbody></table></div>`;
+    if (table.title === "무기") html += `<p class="hint">레이드 무기는 같은 레이드 악세 세트 개수에 들어가요 (사룡무 → 공중요새의 유산, 암귀무 → 심연 레이드 세트). 스크린샷으로는 채우지 않으니 직접 골라 주세요.</p>`;
+    if (table.title === "아바타 악세") html += `<p class="hint">5셋은 레어 아바타 헤어·상의·하의·장갑·신발을 한 세트로 맞춰 입은 것이에요.</p>`;
   }
   $("gear-tables").innerHTML = html;
 }
@@ -73,10 +86,15 @@ function readGear(side) {
     const v = sel(side, group, slot).value;
     return side === "next" && v === SAME ? sel("now", group, slot).value : v;
   };
-  for (const row of ROWS) for (const [slot] of row.slots) {
-    const v = val(row.group, slot) || null;
-    if (row.group === "wear") { if (slot === "outfit") g.outfit = v; else if (slot === "wavatar") g.wavatar = v; else g.armor[slot] = v; }
-    else g[row.group][slot] = v;
+  for (const [group, slot] of ROWS) {
+    const v = val(group, slot) || null;
+    if (group === "weapon") g.weapon = v;
+    else if (group === "wear") {
+      if (slot === "outfit") g.outfit = v;
+      else if (slot === "wavatar") g.wavatar = v;
+      else for (const piece of ARMOR_PIECES) g.armor[piece] = v;   // 5셋: 다섯 부위가 같은 세트
+    }
+    else g[group][slot] = v;
   }
   const el = $(`gear-${side}-element`).value;
   g.atma.element = side === "next" && el === SAME ? $("gear-now-element").value : el;
@@ -196,8 +214,8 @@ function learn(g, s, id, f) {
   } catch (e) { /* 저장이 막힌 환경 */ }
 }
 
-// 스크린샷 칸 -> 화면의 줄, 기준표의 부위
-const rowOf = c => c.group === "avatar" || c.group === "normal" ? [c.group, c.slot] : c.group === "outfit" ? ["wear", "outfit"] : c.group === "wavatar" ? ["wear", "wavatar"] : ["wear", c.slot];
+// 스크린샷 칸 -> 화면의 줄, 기준표의 부위 (레어 아바타 다섯 칸은 모두 5셋 한 줄)
+const rowOf = c => c.group === "avatar" || c.group === "normal" ? [c.group, c.slot] : c.group === "outfit" ? ["wear", "outfit"] : c.group === "wavatar" ? ["wear", "wavatar"] : ["wear", "set5"];
 const refSlot = c => (c.slot === "ring2" ? "ring" : c.slot);
 
 let lastShot = {};   // 마지막 스크린샷에서 읽은 칸별 특징값 (사용자가 고치면 기억하려고)
@@ -235,12 +253,19 @@ async function fillFromShot(file, onChange) {
     document.querySelectorAll("#gear-tables select.filled, #gear-tables select.check").forEach(e => e.classList.remove("filled", "check"));
     lastShot = {};
     let sure = 0, unsure = 0, empty = 0, element = null;
+    const armor = [];   // 레어 아바타 다섯 칸의 결과
     for (const c of equipCells(win)) {
       const [group, slot] = rowOf(c), el = sel("now", group, slot);
-      if (isEmptySlot(data, width, c.box)) { el.value = ""; el.classList.add("filled"); empty++; continue; }
+      const isArmor = c.group === "armor";
+      if (isEmptySlot(data, width, c.box)) {
+        if (isArmor) { armor.push(null); continue; }
+        el.value = ""; el.classList.add("filled"); empty++; continue;
+      }
       const cand = refs.filter(r => r.g === c.group && r.s === refSlot(c));
       const m = matchCell(data, width, c.box, cand, { keepBackground: KEEP_BACKGROUND.has(c.group) });
-      lastShot[el.id] = { g: c.group, s: refSlot(c), f: m ? m.feature : null };
+      const shot = { g: c.group, s: refSlot(c), f: m ? m.feature : null };
+      if (isArmor) { (lastShot[el.id] = lastShot[el.id] || []).push(shot); armor.push(m && m.distance <= MAX_DISTANCE * 1.6 ? m : null); continue; }
+      lastShot[el.id] = [shot];
       if (!m || m.distance > MAX_DISTANCE * 1.6) { el.classList.add("check"); unsure++; continue; }   // 기준표에 없는 아이템
       el.value = m.id;
       el.classList.add(m.sure ? "filled" : "check");
@@ -252,6 +277,16 @@ async function fillFromShot(file, onChange) {
       }
     }
     if (element) { $("gear-now-element").value = element; $("gear-now-element").classList.add("check"); }
+    // 5셋: 다섯 칸 중 가장 많이 나온 세트. 모두 같고 확신이 있을 때만 확신으로 본다
+    if (armor.length) {
+      const el = sel("now", "wear", "set5"), counts = new Map();
+      for (const m of armor) if (m) counts.set(m.id, (counts.get(m.id) || 0) + 1);
+      const top = [...counts].sort((a, b) => b[1] - a[1])[0];
+      el.value = top ? top[0] : "";
+      const allSame = top && top[1] === armor.length && armor.every(m => m && m.sure);
+      el.classList.add(allSame || !armor.some(Boolean) ? "filled" : "check");
+      if (allSame || !armor.some(Boolean)) sure++; else unsure++;
+    }
     status([
       `${sure + unsure + empty}칸을 읽었어요. 확신 ${sure}칸, 빈 칸 ${empty}칸${unsure ? `, 확인이 필요한 칸 ${unsure}칸(노란 테두리)` : ""}.`,
       element ? "아트마 악세는 아이콘으로 등급·속성이 구분되지 않아요. 아트마 속성과 등급을 확인해 주세요." : "",
@@ -273,9 +308,8 @@ export function initGear(onChange) {
   tables.addEventListener("change", e => {
     const t = e.target;
     if (t.classList) t.classList.remove("filled", "check");
-    if (t.id && t.id.startsWith("gear-now-") && lastShot[t.id] && lastShot[t.id].f) {   // 사용자가 고친 칸의 아이콘을 기억
-      const { g, s, f } = lastShot[t.id];
-      learn(g, s, t.value, f);
+    if (t.id && t.id.startsWith("gear-now-") && lastShot[t.id]) {   // 사용자가 고친 칸의 아이콘을 기억 (5셋은 다섯 칸 모두)
+      for (const { g, s, f } of lastShot[t.id]) if (f) learn(g, s, t.value, f);
     }
     saveGear();
   });

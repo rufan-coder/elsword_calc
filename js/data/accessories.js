@@ -211,7 +211,6 @@ export const ACCESSORIES = [
  * 능력치를 몰라 계산에서는 아무 효과도 없는 것으로 본다 (unknown: true). 수치를 알게 되면 ACCESSORIES 로 옮긴다.
  */
 export const NEW_ACCESSORIES = [
-  { name: "칠계의 권능 : 권위의 축원", slot: "face_low", layer: "avatar", set: "없음", unknown: true, stats: {} },
   { name: "엘피어스의 킨더", slot: "support", layer: "avatar", set: "없음", unknown: true, stats: {} },
   { name: "투명 액세서리 (무기)", slot: "weapon", layer: "avatar", set: "없음", stats: {} },   // 원래 능력치가 없는 꾸밈용
   { name: "오리하르콘 그라비티 컨트롤", slot: "weapon", layer: "normal", set: "없음", unknown: true, stats: {} },
@@ -222,8 +221,16 @@ export const NEW_ACCESSORIES = [
   { name: "아이스 퀸", slot: "arm", layer: "normal", set: "없음", unknown: true, stats: {} },
 ];
 
-/** 시트에 없는 레어 아바타 세트 (수치를 모른다) */
-export const NEW_ARMOR_SETS = ["칠계의 권능"];
+/**
+ * 무기 종류. 일부 레이드 무기는 같은 레이드의 악세 세트 개수에 하나로 들어간다 (시트 <아이템 테이블>의 세트 개수 식).
+ * 무기 자체의 공격력 차이는 스펙 계산 쪽(무기 공격력)에서 다룬다.
+ */
+export const WEAPONS = [
+  { name: "사룡무", set: "공중요새의 유산" },
+  { name: "암귀무", set: "심연 레이드 세트" },
+  { name: "혼백무", set: null },
+  { name: "단죄무", set: null },
+];
 
 /** 무기 아바타. 같은 이름의 무악 세트 개수에 들어간다 */
 export const WEAPON_AVATARS = [

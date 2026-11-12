@@ -4,7 +4,7 @@
 //   {
 //     avatar:  { weapon, support, face_top, face_mid, face_low, top, bottom, arm, ear, neck, ring }   아바타 악세 이름 (없으면 null)
 //     normal:  { ...같은 부위, ring2 }                                                              일반 악세 이름
-//     outfit:  한 벌 아바타 이름,  wavatar: 무기 아바타 이름
+//     outfit:  한 벌 아바타 이름,  wavatar: 무기 아바타 이름,  weapon: 무기 종류 (사룡무 등. 레이드 세트 개수에만 쓴다)
 //     armor:   { hair, top, bottom, gloves, shoes }                                                레어 아바타 세트 이름
 //     atma:    { element: "유수", grades: { face_mid, face_low, arm, neck } }                       아트마 속성과 부위별 등급
 //     avatarSets: [세트 이름...] | null   무악 세트를 4개 이상 맞췄을 때 켜 둔 세트 (null 이면 자동)
@@ -15,7 +15,7 @@
 //     바꾼 뒤 스탯창 = 지금 스탯창 - 지금 장비의 "보이는 효과" + 바꾼 장비의 "보이는 효과"
 //   곱연 크뎀과 최종 데미지는 스탯창에 안 보이므로 양쪽 모두 따로 곱해서 비교한다.
 
-import { ACCESSORIES, NEW_ACCESSORIES, ARMOR_AVATARS, WEAPON_AVATARS, OUTFITS, SETS, ATMA, AVATAR_SET_LIMIT } from "../data/accessories.js";
+import { ACCESSORIES, NEW_ACCESSORIES, ARMOR_AVATARS, WEAPON_AVATARS, OUTFITS, WEAPONS, SETS, ATMA, AVATAR_SET_LIMIT } from "../data/accessories.js";
 import { critFromStat, statFromCrit, maxiFromStat, statFromMaxi } from "./diminish.js";
 import { resolve, dpsIndex, has } from "./stats.js";
 
@@ -34,7 +34,7 @@ export const STAT_NAMES = {
 };
 
 export const emptyGear = () => ({
-  avatar: {}, normal: {}, outfit: null, wavatar: null, armor: {},
+  avatar: {}, normal: {}, outfit: null, wavatar: null, weapon: null, armor: {},
   atma: { element: "유수", grades: {} }, avatarSets: null,
 });
 
@@ -62,6 +62,7 @@ function countSets(gear) {
   for (const name of Object.values(gear.avatar)) { const a = ACC_BY_NAME.get(name); if (a) bump(a.set); }
   for (const name of Object.values(gear.normal)) { const a = ACC_BY_NAME.get(name); if (a && !a.atma) bump(a.set); }
   const w = WAVATAR_BY_NAME.get(gear.wavatar); if (w) bump(w.set);
+  const weapon = WEAPONS.find(x => x.name === gear.weapon); if (weapon) bump(weapon.set);
   for (const set of Object.values(gear.armor)) if (SETS[set]) bump(set);
   return count;
 }

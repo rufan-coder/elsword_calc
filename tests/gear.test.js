@@ -75,5 +75,16 @@ test("장비 교체: 스탯창 칸이 비어 있으면 그 효과는 빼고 알�
 });
 
 test("장비 교체: 수치를 모르는 악세는 따로 알려 준다", () => {
-  assert.deepEqual(gearEffects(gear({ avatar: { face_low: "칠계의 권능 : 권위의 축원" } }), "마법").unknown, ["칠계의 권능 : 권위의 축원"]);
+  assert.deepEqual(gearEffects(gear({ avatar: { support: "엘피어스의 킨더" } }), "마법").unknown, ["엘피어스의 킨더"]);
+});
+
+test("세트: 사룡무는 공중요새의 유산 개수에 들어간다", () => {
+  const normal = { weapon: "Type-Q 여왕의 훈장", support: "운명의 예언서", bottom: "영혼의 족쇄" };
+  const count = g => gearEffects(g, "마법").sets.find(s => s.name === "공중요새의 유산").count;
+  assert.equal(count(gear({ normal })), 3);
+  assert.equal(count(gear({ normal, weapon: "사룡무" })), 4);
+  // 사룡무가 있으면 족쇄를 빼도 3세트가 유지되고, 없으면 3세트 효과(양극화 5%, 추가 피해 5%)가 꺼진다
+  const swap = w => compareGear(ctx, gear({ normal, weapon: w }), gear({ normal: { ...normal, bottom: "글로잉 플라워" }, weapon: w }));
+  assert.equal(swap("사룡무").delta.polar, undefined);
+  near(swap(null).delta.polar, -0.05, 10);
 });

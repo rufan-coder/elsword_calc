@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { iconFeature, matchIcon, matchCell, encodeFeature, decodeFeature, isEmptySlot, FEATURE_LENGTH } from "../js/ocr/icons.js";
 import { findCharWindow, equipCells } from "../js/ocr/equip-window.js";
 import { ICONS } from "../js/data/icons.js";
-import { ACCESSORIES, NEW_ACCESSORIES, ARMOR_AVATARS, NEW_ARMOR_SETS, WEAPON_AVATARS, OUTFITS } from "../js/data/accessories.js";
+import { ACCESSORIES, NEW_ACCESSORIES, ARMOR_AVATARS, WEAPON_AVATARS, OUTFITS } from "../js/data/accessories.js";
 
 /** 가짜 이미지: w x h RGBA, paint(x, y) -> [r, g, b] */
 function image(w, h, paint) {
@@ -58,7 +58,7 @@ test("아이콘 기준표: 모든 줄이 데이터의 아이템을 가리킨다"
   for (const [group, slot, id, f] of ICONS) {
     assert.equal(decodeFeature(f).length, FEATURE_LENGTH);
     if (group === "avatar" || group === "normal") assert.ok(acc.has(`${group}|${slot}|${id}`), id);
-    else if (group === "armor") assert.ok(ARMOR_AVATARS[id] || NEW_ARMOR_SETS.includes(id), id);
+    else if (group === "armor") assert.ok(ARMOR_AVATARS[id], id);
     else if (group === "wavatar") assert.ok(WEAPON_AVATARS.some(w => w.name === id), id);
     else if (group === "outfit") assert.ok(OUTFITS.some(o => o.name === id), id);
     else assert.fail(group);

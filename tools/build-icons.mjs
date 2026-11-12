@@ -11,7 +11,7 @@ import { join } from "node:path";
 import { readPng } from "./png.mjs";
 import { iconFeature, encodeFeature, KEEP_BACKGROUND } from "../js/ocr/icons.js";
 import { matchItemName, normalizeItemName } from "../js/ocr/item-names.js";
-import { ACCESSORIES, NEW_ACCESSORIES, ARMOR_AVATARS, NEW_ARMOR_SETS, WEAPON_AVATARS, OUTFITS, ATMA } from "../js/data/accessories.js";
+import { ACCESSORIES, NEW_ACCESSORIES, ARMOR_AVATARS, WEAPON_AVATARS, OUTFITS, ATMA } from "../js/data/accessories.js";
 
 const folder = process.argv[2];
 if (!folder) { console.error("사용법: node tools/build-icons.mjs <스크린샷 폴더>"); process.exit(1); }
@@ -39,8 +39,8 @@ function resolveName(group, slot, display) {
     return [m.name];
   }
   if (group === "armor") {
-    const m = name.match(PIECE_RE), set = m && m[1].split(" : ")[0];   // "칠계의 권능 : 권속 예식 헤어" -> "칠계의 권능"
-    if (!set || !(ARMOR_AVATARS[set] || NEW_ARMOR_SETS.includes(set))) throw new Error(`레어 아바타 세트를 못 찾음: ${display}`);
+    const m = name.match(PIECE_RE), set = m && m[1];
+    if (!set || !ARMOR_AVATARS[set]) throw new Error(`레어 아바타 세트를 못 찾음: ${display}`);
     return [set];   // 가면도 헤어 칸이라 세트 이름만 쓴다
   }
   if (group === "wavatar") {
