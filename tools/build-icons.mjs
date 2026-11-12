@@ -65,7 +65,8 @@ for (const r of labels.reports) {
     const box = { x: r.first[0], y: r.first[1] + labels.pitch * i, w: labels.icon, h: labels.icon };
     const f = encodeFeature(iconFeature(img.data, img.width, box, { keepBackground: KEEP_BACKGROUND.has(r.group) }));
     if (rows.some(x => x[0] === r.group && x[1] === slot && x[2] === id && x[3] === f)) return;   // 같은 그림이 두 번 (반지 두 칸 등)
-    rows.push(element ? [r.group, slot, id, f, element] : [r.group, slot, id, f]);
+    // 속성은 계산기에서 쓰는 것(ATMA.elements)만 적는다. 쓰지 않는 속성의 아이콘은 아트마 악세인지만 알아본다
+    rows.push(element && ATMA.elements.includes(element) ? [r.group, slot, id, f, element] : [r.group, slot, id, f]);
   });
 }
 

@@ -235,6 +235,7 @@ export function renderGear({ win, job, resist, setup }) {
   const unknown = [...new Set([...r.before.unknown, ...r.after.unknown])];
   if (unknown.length) notes.push(`수치를 모르는 아이템은 효과가 없는 것으로 계산했어요: ${unknown.join(", ")}`);
   if ([r.before.atma, r.after.atma].some(a => a.grade && !a.active)) notes.push("이 속성의 아트마 세트 효과는 데이터에 없어서 계산하지 않았어요.");
+  if (["now", "next"].some(side => { const g = readGear(side); return g.normal.ring && g.normal.ring === g.normal.ring2; })) notes.push("같은 반지는 두 개 낄 수 없어요. 반지 1과 반지 2를 다르게 골라 주세요.");
   if (notes.length) html += `<ul class="notes">${notes.map(n => `<li>${esc(n)}</li>`).join("")}</ul>`;
   out.innerHTML = html;
 }
@@ -330,7 +331,7 @@ async function fillFromShot(file, onChange) {
       if (m.sure) sure++; else unsure++;
       // 아트마 악세면 가장 닮은 기준 아이콘의 속성을 쓴다
       if (isAtmaItem(m.id)) {
-        const near = cand.filter(r => r.id === m.id && r.el).sort((a, b) => featureDistance(m.feature, a.f) - featureDistance(m.feature, b.f))[0];
+        const near = cand.filter(r => r.id === m.id && ATMA.elements.includes(r.el)).sort((a, b) => featureDistance(m.feature, a.f) - featureDistance(m.feature, b.f))[0];
         if (near && !element) element = near.el;
       }
     }
