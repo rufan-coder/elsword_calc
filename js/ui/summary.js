@@ -20,11 +20,9 @@ export function renderSummary({ cls, job, resist, win, base, buffs }) {
   $("cls-extra").hidden = !CLASS_NOTES[cls]; $("cls-extra").textContent = CLASS_NOTES[cls] || "";
 
   // 버프 세팅이 실제로 어떤 수치로 들어갔는지
-  const { town, pants, shoes, yellow, eng, enc } = buffs;
-  const engText = [["cd", "크뎀(기본 크뎀 곱연산)"], ["boss", "보뎀"], ["patk", "물공"], ["matk", "마공"], ["skill", "스킬 데미지"]]
-    .filter(([k]) => eng[k] > 0).map(([k, name]) => `${name} +${trimPct(eng[k])}`).join(", ");
+  const { town, pants, shoes, yellow, enc } = buffs;
   $("setup-info").textContent = `적용 값 · 마을 버프 크리 +${trimPct(town.crit)} 극대 +${trimPct(town.maxi)} · 하의 크확 ×${trimPct(pants)} · 신발 극대 ×${trimPct(shoes)}` + (yellow ? " · 황색 크극 ×8%" : "") +
-    ` · 각인석 ${engText || "없음"} · 격려 가동률 ${(enc.uptime * 100).toFixed(1)}% (쿨 ${Math.round(enc.cool)}초, 지속 ${Math.round(enc.dur)}초)`;
+    ` · 격려 가동률 ${(enc.uptime * 100).toFixed(1)}% (쿨 ${Math.round(enc.cool)}초, 지속 ${Math.round(enc.dur)}초)`;
 
   // 실전 수치
   const tiles = [];

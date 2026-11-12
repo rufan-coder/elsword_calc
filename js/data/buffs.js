@@ -30,6 +30,3 @@ export const ENCOURAGE = {
   growthCooldownCut: 1 / 3,   // 응원 성장 최대치의 재사용 시간 감소
   growthDurationUp: 0.5,      // 끈기 성장 최대치의 지속 시간 증가
 };
-
-/** 금빛 각인석이 실제로 켜져 있는 비율 = 적빛 발동 x 쪽빛 발동 x 금빛 발동 */
-export const ENGRAVE_UPTIME = 0.85 * 1.0 * 0.25;

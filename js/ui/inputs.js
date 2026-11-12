@@ -40,7 +40,6 @@ export function readInputs() {
     town: $("town").value,
     yellow: $("yellow").value === "1",
     pantsEnhance: num("pants") || 0, shoesEnhance: num("shoes") || 0,
-    engraveRows: [1, 2, 3].map(i => ({ kind: $("eng_kind_" + i).value, value: pctOrZero("eng_val_" + i) })),
     stoneCdr: pctOrZero("enc_cdr"), stoneDur: pctOrZero("enc_dur"),
   });
   return { cls, job: CLASS[cls], dungeon, resist: DUNGEONS[dungeon].critResist, win, setup, buffs: detail, shareBlank: $("share_cho").value === "" };
