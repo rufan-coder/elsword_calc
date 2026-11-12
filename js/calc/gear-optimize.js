@@ -11,6 +11,11 @@
 //   4) 아바타 쪽 -> 일반 악세 쪽 -> 한 벌·5셋 순서로 되풀이한다 (한쪽이 바뀌면 스탯 가치가 바뀌므로)
 //   5) 마지막으로 칸 하나 바꾸기·세트 채우기를 정확한 계산으로 더 좋아지지 않을 때까지 해 본다 (다듬기)
 //
+// 쿨감은 DPS에 넣지 않는다. 대신 "바꾼 뒤 초월한 스킬 재사용 시간 감소가 목표(cdrTarget) 아래로 내려가지 않게" 지킨다.
+//   - 목표보다 모자라면 1%p마다 아주 큰 값을 깎아서, 목표를 먼저 지키고 그 안에서 DPS가 가장 높은 것을 고르게 한다
+//     (목표를 못 맞추는 경우에는 가장 가깝게 맞춘다)
+//   - 2)의 어림에는 쿨감 가치(λ)를 0, 조금, 많이로 바꿔 가며 계획을 따로 뽑아서, 쿨감 아이템을 쓰는 계획도 후보에 들어가게 한다
+//
 // 가정
 //   - 고정하지 않은 칸은 게임에 있는 어떤 아이템이든 낄 수 있다고 본다
 //   - 고정하지 않은 아트마 악세는 유니크로 본다 (만다라는 등급이 이름에 있어서 그중 가장 좋은 것을 고른다)
@@ -26,6 +31,10 @@ const ATMA_GRADED = ATMA.pieces.filter(s => s !== "top");
 const BEST_ATMA_GRADE = ATMA.maxGrade;
 const ATMA_ELEMENTS = Object.keys(ATMA.sets).map(n => n.replace(/의 아트마$/, ""));
 const ATMA_NAMES = new Set(ACCESSORIES.filter(a => a.atma).map(a => a.name));
+/** 목표 쿨감에서 1(=100%p) 모자랄 때 깎는 값. 1%p만 모자라도 DPS 1000%를 잃는 셈이라 목표가 언제나 먼저다 */
+const CDR_PENALTY = 1000;
+/** 어림할 때 쿨감 1(=100%p)의 가치. 0 = 쿨감 무시, 클수록 쿨감 아이템을 먼저 고른다 */
+const CDR_LAMBDAS = [0, 0.3, 1, 5];
 
 /** 고정할 수 있는 칸의 이름: "avatar.weapon", "normal.ring2", "outfit", "wavatar", "armor"(5셋), "element"(아트마 속성) */
 export const LOCKABLE = [
@@ -178,18 +187,29 @@ function bestPlans(slots, groups, limit, keep) {
  * 자동 찾기.
  * ctx    : { win, job, resist, setup } (compareGear 와 같다)
  * now    : 지금 장착 상태 (gear.js 의 모양)
- * opts   : { locked: 고정할 칸 이름 목록 (LOCKABLE 참고), plans: 정확히 계산해 볼 계획 수, rounds: 마지막에 무작위로 흔들어 볼 횟수, kicks: 한 번에 흔드는 최대 개수, seed }
- * 반환   : { gear: 찾은 장착 상태, gain: 지금 대비 DPS 변화, evals: 정확히 계산한 조합 수, plans: 어림해 본 세트 계획 수 }
+ * opts   : { locked: 고정할 칸 이름 목록 (LOCKABLE 참고), cdrTarget: 지킬 초월 쿨감 (0.32 = 32%, 없으면 null),
+ *            plans: 정확히 계산해 볼 계획 수, rounds: 마지막에 무작위로 흔들어 볼 횟수, kicks: 한 번에 흔드는 최대 개수, seed }
+ * 반환   : { gear: 찾은 장착 상태, gain: 지금 대비 DPS 변화, cdr: 바꾼 뒤 초월 쿨감, cdrMet: 목표를 지켰는지,
+ *            evals: 정확히 계산한 조합 수, plans: 어림해 본 세트 계획 수 }
  */
-export function optimizeGear(ctx, now, { locked = [], plans: keep = 30, rounds = 4, kicks = 1, seed = 1 } = {}) {
+export function optimizeGear(ctx, now, { locked = [], cdrTarget = null, plans: keep = 30, rounds = 4, kicks = 1, seed = 1 } = {}) {
   const atkType = ctx.job ? ctx.job.type : "물리";
   const scorer = gearScorer(ctx, now);
   let evals = 0, planCount = 0;
-  const value = g => { evals++; return scorer.evaluate(g).value; };
+  // 쿨감 목표: 스탯창에 초월 쿨감 값이 있어야 바꾼 뒤 값을 알 수 있다
+  const useCdr = cdrTarget != null && isFinite(cdrTarget) && typeof ctx.win.cdr_cho === "number";
+  const judge = g => {
+    const r = scorer.evaluate(g), cdr = r.shifted.win.cdr_cho;
+    const short = useCdr ? Math.max(0, cdrTarget - cdr) : 0;
+    return { dps: r.value, cdr, short: short > 1e-9 ? short : 0 };
+  };
+  const value = g => { evals++; const j = judge(g); return j.dps - CDR_PENALTY * j.short; };
   const lock = new Set(locked);
   const all = variables(atkType), vars = all.filter(v => !lock.has(v.key));
   const byKey = new Map(all.map(v => [v.key, v]));
   const elementVar = vars.find(v => v.key === "element");
+  /** 속성 후보. 지금 속성을 맨 앞에 둬서, 효과가 같은 속성(유수·화염)끼리는 괜히 바꾸라고 하지 않게 한다 */
+  const elementsFrom = g => [g.atma.element].filter(e => ATMA_ELEMENTS.includes(e)).concat(ATMA_ELEMENTS.filter(e => e !== g.atma.element));
 
   /** 바꾸기 하나: [[칸, 값], ...]. 고정하지 않은 아트마 칸에 아트마 악세를 넣으면 등급을 유니크로 본다 */
   const apply = (g, changes) => {
@@ -202,7 +222,9 @@ export function optimizeGear(ctx, now, { locked = [], plans: keep = 30, rounds =
   };
 
   // ----- 1) 스탯별 가치: 지금 상태에서 그 스탯이 1%p 늘면 DPS가 몇 % 느는지 (점감·상한 반영) -----
-  const KEYS = ["crit", "maxi", "crit_dmg", "atk_pct", "boss", "polar", "all_skill", "cho", "gang", "hp_over", "hp_under", "hp100", "add", "adapt", "cdr_all", "cd_mult", "final"];
+  const KEYS = ["crit", "maxi", "crit_dmg", "atk_pct", "boss", "polar", "all_skill", "cho", "gang", "hp_over", "hp_under", "hp100", "add", "adapt", "cd_mult", "final"];
+  const lambdas = useCdr ? CDR_LAMBDAS : [0];
+  const keepEach = Math.ceil(keep / lambdas.length) + (useCdr ? 5 : 0);
   function weights(g) {
     const fx = scorer.evaluate(g).fx, v0 = scorer.valueOf(fx), d = 0.01, w = {};
     for (const k of KEYS) {
@@ -254,7 +276,13 @@ export function optimizeGear(ctx, now, { locked = [], plans: keep = 30, rounds =
   function avatarStep(g, cur) {
     const layerVars = vars.filter(v => v.group === "avatar");
     if (!layerVars.length) return { g, v: cur };
-    const w = weights(g), slots = freeBest(layerVars, w, g);
+    const base = weights(g), cands = [];
+    for (const lam of lambdas) cands.push(...avatarPlans(g, { ...base, cdr_all: lam }, layerVars));
+    // 다듬을 때 한 벌·5셋도 같이 다시 고른다 (크리·극대 균형이 아바타 악세와 맞물려 있어서)
+    return bestRealized(g, cur, cands, layerVars.concat(vars.filter(v => v.group === "wear")));
+  }
+  function avatarPlans(g, w, layerVars) {
+    const slots = freeBest(layerVars, w, g);
     const groups = [];
     for (const [name, s] of Object.entries(SETS)) {
       if (s.kind !== "avatar") continue;
@@ -268,17 +296,21 @@ export function optimizeGear(ctx, now, { locked = [], plans: keep = 30, rounds =
         .filter(o => o.need >= 1 && o.need <= pieces.length);
       if (options.length) groups.push({ id: name, pieces, options });
     }
-    const { list, total } = bestPlans(slots, groups, AVATAR_SET_LIMIT, keep);
+    const { list, total } = bestPlans(slots, groups, AVATAR_SET_LIMIT, keepEach);
     planCount += total;
-    // 다듬을 때 한 벌·5셋도 같이 다시 고른다 (크리·극대 균형이 아바타 악세와 맞물려 있어서)
-    return bestRealized(g, cur, list.map(p => realize(g, slots, p)), layerVars.concat(vars.filter(v => v.group === "wear")));
+    return list.map(p => realize(g, slots, p));
   }
 
   // ----- 2)·3) 일반 악세 쪽: 레이드 세트 + 아트마(속성별) -----
   function normalStep(g, cur) {
     const layerVars = vars.filter(v => v.group === "normal");
     if (!layerVars.length) return { g, v: cur };
-    const w = weights(g), slots = freeBest(layerVars, w, g);
+    const base = weights(g), cands = [];
+    for (const lam of lambdas) cands.push(...normalPlans(g, { ...base, cdr_all: lam }, layerVars));
+    return bestRealized(g, cur, cands, layerVars);
+  }
+  function normalPlans(g, w, layerVars) {
+    const slots = freeBest(layerVars, w, g);
     const groups = [];
     for (const [name, s] of Object.entries(SETS)) {
       if (s.kind !== "other") continue;
@@ -299,7 +331,7 @@ export function optimizeGear(ctx, now, { locked = [], plans: keep = 30, rounds =
       if (best) atmaPieces.push([i, best[0], best[1]]);
     });
     const fixedAtma = ATMA.pieces.filter(s => !slots.some(sl => sl.v.slot === s) && ATMA_NAMES.has(g.normal[s])).length;
-    const elements = elementVar ? ATMA_ELEMENTS : [g.atma.element];
+    const elements = elementVar ? elementsFrom(g) : [g.atma.element];
     const atmaOptions = [];
     for (const el of elements) {
       const eff = ATMA.sets[`${el}의 아트마`];
@@ -311,10 +343,10 @@ export function optimizeGear(ctx, now, { locked = [], plans: keep = 30, rounds =
       }
     }
     if (atmaOptions.length) groups.push({ id: "atma", pieces: atmaPieces, options: atmaOptions });
-    const { list, total } = bestPlans(slots, groups, groups.length, keep);
+    const { list, total } = bestPlans(slots, groups, groups.length, keepEach);
     planCount += total;
     const setElement = (n, plan) => { const t = plan.tags.find(x => x.startsWith("atma:")); if (t && elementVar) n.atma.element = t.slice(5); };
-    return bestRealized(g, cur, list.map(p => realize(g, slots, p, setElement)), layerVars);
+    return list.map(p => realize(g, slots, p, setElement));
   }
 
   // ----- 한 벌·5셋: 하나씩 모두 계산해 본다 -----
@@ -331,7 +363,9 @@ export function optimizeGear(ctx, now, { locked = [], plans: keep = 30, rounds =
    * (남은 칸은 어림값으로 채웠기 때문에, 정확히 계산하면 다른 아이템이 더 나을 수 있다)
    */
   function bestRealized(g, cur, candidates, layerVars, top = 5) {
-    const scored = candidates.filter(validRings).map(n => ({ g: n, v: value(n) })).sort((a, b) => b.v - a.v).slice(0, top);
+    const seen = new Set();
+    const unique = candidates.filter(n => { const k = JSON.stringify(n); if (seen.has(k)) return false; seen.add(k); return validRings(n); });
+    const scored = unique.map(n => ({ g: n, v: value(n) })).sort((a, b) => b.v - a.v).slice(0, top);
     let best = { g, v: cur };
     for (let { g: n, v } of scored) {
       for (let pass = 0; pass < 2; pass++) {
@@ -428,7 +462,7 @@ export function optimizeGear(ctx, now, { locked = [], plans: keep = 30, rounds =
           const need = k - have;
           if (need < 1 || need > pieces.length) continue;
           const base = pieces.slice(0, need).map(([v, x]) => [v, x]);
-          for (const el of elementVar ? elementVar.values : [null]) {
+          for (const el of elementVar ? elementsFrom(g) : [null]) {
             if (need === 1 && (!el || el === g.atma.element)) continue;   // 칸 하나 바꾸기와 같다
             consider(el ? base.concat([[elementVar, el]]) : base);
           }
@@ -466,5 +500,6 @@ export function optimizeGear(ctx, now, { locked = [], plans: keep = 30, rounds =
     const r = climb(n, value(n));
     if (r.v > cur + 1e-12) ({ g, v: cur } = r);
   }
-  return { gear: g, gain: cur - 1, evals, plans: planCount };
+  const end = judge(g);
+  return { gear: g, gain: end.dps - 1, cdr: end.cdr, cdrMet: end.short === 0, evals, plans: planCount };
 }

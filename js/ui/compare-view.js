@@ -33,7 +33,7 @@ export function readOptionRows() {
 
 export function setOptionRows(rows) {
   document.querySelectorAll("#opts [data-row]").forEach(r => r.remove());
-  for (const row of rows) addOptionRow(...row);
+  for (const row of rows) if (!row[1] || OPTION_KINDS[row[1]]) addOptionRow(...row);   // 없어진 종류(쿨감 등)로 저장된 줄은 건너뛴다
 }
 
 /** 옵션 줄 지우기·추가 버튼 연결. 바뀌면 onChange를 부른다 */

@@ -50,7 +50,7 @@ export function renderSummary({ cls, job, resist, win, base, setup, buffs }) {
     const g = base.cdr_gang || 0, c = base.cdr_cho || 0, room = x => trimPct(Math.max(0, CDR_CAP - x));
     const side = (x, k) => over[k] ? overText(over[k], k) : `${room(x)} 남음`;
     tiles.push(["쿨감 (강렬/초월)", `${trimPct(g)}/${trimPct(c)}`, over.cdr_gang || over.cdr_cho ? `${side(g, "cdr_gang")} / ${side(c, "cdr_cho")}` : `상한까지 ${room(g)} / ${room(c)}`, "",
-      "강렬·초월 스킬 재사용 시간 감소. 35%까지만 적용돼요."]);
+      "강렬·초월 스킬 재사용 시간 감소. 35%까지만 적용돼요. DPS 계산에는 넣지 않아요."]);
   }
   // 양극화: 상한(60%)을 넘었을 때만 보여 준다
   if (over.polar) tiles.push(["양극화", fmt(POLAR_CAP, 1), `스탯창 ${fmt(win.polar, 1)} · ${overText(over.polar, "polar")}`, "", CAP_NOTES.polar]);

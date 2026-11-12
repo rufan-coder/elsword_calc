@@ -167,9 +167,21 @@ const hasWindow = win => Object.keys(win).some(k => k !== "share_cho" && k !== "
 /** 상한을 넘은 양: 빨간 글씨 "1% 초과" (크리·극대화는 실전 값 기준) */
 const overSpan = (over, k) => over[k] ? `<span class="over" title="${esc(CAP_NOTES[k])}">${k === "crit" || k === "maxi" ? "실전 " : ""}${trimPct(over[k])} 초과</span>` : "";
 
+/** 지킬 초월 쿨감: 입력칸 값, 비었으면 스탯창 값. 스탯창에 초월 쿨감이 없으면 null (지킬 수 없음) */
+function cdrTarget(win) {
+  if (typeof win.cdr_cho !== "number") return null;
+  const v = parseFloat($("gear-cdr-target").value);
+  return isFinite(v) ? v / 100 : win.cdr_cho;
+}
+/** 초월 쿨감이 목표보다 낮으면 빨간 글씨 "목표보다 2% 낮음" */
+const shortSpan = (cdr, target) => target != null && cdr < target - 1e-9 ? `<span class="over" title="초월 쿨감 목표 ${trimPct(target)}">목표보다 ${trimPct(target - cdr)} 낮음</span>` : "";
+
 export function renderGear({ win, job, resist, setup }) {
   lastCtx = { win, job, resist, setup };
   syncGrades();
+  const hasCdr = typeof win.cdr_cho === "number";
+  $("gear-cdr-target").placeholder = hasCdr ? String(+(win.cdr_cho * 100).toFixed(2)) : "";
+  $("gear-cdr-hint").textContent = hasCdr ? `비워 두면 스탯창 값(${trimPct(win.cdr_cho)})을 써요` : "스펙 계산에 초월한 스킬 재사용 시간 감소를 넣어야 지킬 수 있어요";
   const out = $("gear-out");
   if (!hasWindow(win)) {
     out.innerHTML = `<p class="hint">먼저 <a href="#spec">스펙 계산</a>에 스탯창 값을 넣어 주세요. 그 값을 기준으로 바꿨을 때의 차이를 계산해요.</p>`;
@@ -212,10 +224,11 @@ export function renderGear({ win, job, resist, setup }) {
 
   // 스탯창 전체: 지금 -> 바꾼 뒤 (바뀐 줄은 굵게)
   const after = r.win, stat = x => (x * 100).toFixed(2) + "%";
-  const overNow = capOver(win, setup, job, resist), overAfter = capOver(after, setup, job, resist);
+  const overNow = capOver(win, setup, job, resist), overAfter = capOver(after, setup, job, resist), target = cdrTarget(win);
+  const mark = (w, over, k) => overSpan(over, k) + (k === "cdr_cho" ? shortSpan(w[k], target) : "");
   const lines = WINDOW_STATS.filter(([k]) => typeof win[k] === "number").map(([k, name]) => {
     const d = after[k] - win[k], diff = Math.abs(d) > 5e-5;
-    return `<tr class="${diff ? "diff" : ""}"><td>${name}</td><td class="num">${stat(win[k])}${overSpan(overNow, k)}</td><td class="num">${stat(after[k])}${overSpan(overAfter, k)}</td><td class="num">${diff ? pctText(d).replace("%", "%p") : ""}</td></tr>`;
+    return `<tr class="${diff ? "diff" : ""}"><td>${name}</td><td class="num">${stat(win[k])}${mark(win, overNow, k)}</td><td class="num">${stat(after[k])}${mark(after, overAfter, k)}</td><td class="num">${diff ? pctText(d).replace("%", "%p") : ""}</td></tr>`;
   });
   const prod = xs => xs.reduce((a, x) => a * (1 + x), 1), mult = x => "x" + x.toFixed(4).replace(/0+$/, "").replace(/\.$/, "");
   const hidden = [["크뎀 곱연산", prod(r.hidden.cd[0]), prod(r.hidden.cd[1])], ["최종 데미지", prod(r.hidden.final[0]), prod(r.hidden.final[1])]];
@@ -225,7 +238,8 @@ export function renderGear({ win, job, resist, setup }) {
   }
   html += `<div class="sub">스탯창 (지금 → 바꾼 뒤)</div><div class="tbl-wrap"><table class="gear-out stats"><thead><tr><th>스탯</th><th class="num">지금</th><th class="num">바꾼 뒤</th><th class="num">변화</th></tr></thead><tbody>${lines.join("")}</tbody></table></div>` +
     `<p class="hint">크리티컬·극대화는 점감이 다시 걸린 값이에요. 곱연 크뎀과 최종 데미지는 장비에서 나오는 배율만 따로 보여 줘요.` +
-    (Object.keys(overNow).length || Object.keys(overAfter).length ? ` <span class="over">빨간 글씨</span>는 상한을 넘어서 DPS에 도움이 안 되는 만큼이에요 (적응력은 마을 버프 포함).` : "") + `</p>`;
+    (Object.keys(overNow).length || Object.keys(overAfter).length ? ` <span class="over">빨간 글씨</span>는 상한을 넘어서 DPS에 도움이 안 되는 만큼이에요 (적응력은 마을 버프 포함).` : "") +
+    (hasCdr ? ` 쿨감은 DPS에 넣지 않아요. 초월 쿨감이 목표(${trimPct(target)})보다 낮아지면 빨간 글씨로 알려 줘요.` : "") + `</p>`;
 
   // 알림
   const notes = [];
@@ -246,7 +260,7 @@ function allSelects() { return [...document.querySelectorAll("#gear-tables selec
 const DEFAULT_WEAPON = "사룡무";
 
 function saveGear() {
-  const s = { v: 2, sel: Object.fromEntries(allSelects().map(e => [e.id, e.value])), avatarSets: nowAvatarSets, locks: readLocks() };
+  const s = { v: 2, sel: Object.fromEntries(allSelects().map(e => [e.id, e.value])), avatarSets: nowAvatarSets, locks: readLocks(), cdrTarget: $("gear-cdr-target").value };
   try { localStorage.setItem(KEY, JSON.stringify(s)); } catch (e) { /* 저장이 막힌 환경 */ }
 }
 function loadGear() {
@@ -257,6 +271,7 @@ function loadGear() {
     for (const e of allSelects()) if (s.sel && e.id in s.sel && [...e.options].some(o => o.value === s.sel[e.id])) e.value = s.sel[e.id];
     nowAvatarSets = Array.isArray(s.avatarSets) ? s.avatarSets : null;
     if (Array.isArray(s.locks)) for (const e of document.querySelectorAll("#gear-tables input[data-lock]")) e.checked = s.locks.includes(e.dataset.lock);
+    if (typeof s.cdrTarget === "string") $("gear-cdr-target").value = s.cdrTarget;
   } catch (e) { /* 못 읽으면 처음 상태로 */ }
 }
 
@@ -390,7 +405,8 @@ export function initGear(onChange) {
       try {
         const t = performance.now();
         const now = readGear("now");
-        const r = optimizeGear(lastCtx, now, { locked: readLocks() });
+        const target = cdrTarget(lastCtx.win);
+        const r = optimizeGear(lastCtx, now, { locked: readLocks(), cdrTarget: target });
         const sec = Math.max(0.1, (performance.now() - t) / 1000).toFixed(1);
         fillNext(r.gear);
         // 스탯창에는 지금 낀 장비 효과가 이미 들어 있어서, 지금 세팅이 비어 있으면 변화가 실제보다 크게 나온다
@@ -398,6 +414,7 @@ export function initGear(onChange) {
         st.textContent = (r.gain > 1e-9
           ? `가장 좋은 조합을 "바꿔 보기"에 채웠어요. 지금보다 DPS ${signed(r.gain)} · 세트 조합 ${r.plans.toLocaleString("ko-KR")}가지를 따져 봤어요 (${sec}초).`
           : "지금 세팅이 이미 가장 좋아요.") +
+          (target != null ? ` 초월 쿨감 ${trimPct(lastCtx.win.cdr_cho)} → ${trimPct(r.cdr)} (목표 ${trimPct(target)}${r.cdrMet ? "" : ", 목표를 맞출 수 있는 조합이 없어서 가장 가깝게 맞췄어요"}).` : "") +
           (worn < 12 ? " 지금 세팅 칸이 많이 비어 있어서 변화가 실제보다 크게 나올 수 있어요. 지금 낀 것을 먼저 채워 주세요." : "");
         saveGear(); onChange();
       } catch (e) {
@@ -405,6 +422,7 @@ export function initGear(onChange) {
       } finally { btn.disabled = false; }
     }, 30);
   });
+  $("gear-cdr-target").addEventListener("input", saveGear);
   $("gear-reset-next").addEventListener("click", () => {
     for (const e of allSelects()) if (e.id.startsWith("gear-next-")) e.value = SAME;
     saveGear(); onChange();

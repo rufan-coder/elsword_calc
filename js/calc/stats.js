@@ -3,7 +3,7 @@
 // 여기서 쓰는 값의 모양
 //   win   : 스탯창에 보이는 값. 확률·증가량은 비율(0.83 = 83%), 공격력은 그대로.
 //           { crit, crit_dmg, maxi, A, A_max, W, boss, all_skill, cho, gang, share_cho, share_gang, polar, add, hp_over, hp_under, hp100,
-//             adapt, super_adapt, cdr_gang, cdr_cho }
+//             adapt, super_adapt, cdr_gang, cdr_cho }   쿨감(cdr_*)은 DPS에 넣지 않는다
 //   job   : 전직 패시브 (js/data/classes.js 의 한 항목). 없으면 NO_PASSIVE
 //   setup : 스탯창에 안 보이는 버프 묶음 (js/calc/buffs.js 의 buildSetup 결과)
 //           { town_crit, town_maxi, town_adapt, town_boss, crit_mults[], maxi_mults[], cd_base_mults[], guild_boss, enc_uptime,
@@ -11,7 +11,7 @@
 
 import { critFromStat, statFromCrit, maxiFromStat, statFromMaxi } from "./diminish.js";
 import { ENCOURAGE } from "../data/buffs.js";
-import { ADAPT_CAP, CDR_CAP, CDR_DPS_K } from "../data/rules.js";
+import { ADAPT_CAP } from "../data/rules.js";
 
 export const prod = xs => xs.reduce((a, x) => a * (1 + x), 1);   // Π(1 + x)
 export const sum = xs => xs.reduce((a, x) => a + x, 0);
@@ -78,18 +78,6 @@ export function adaptMult(s) {
   return 1 - Math.max(0, (s.debuff || 0) - adaptFinal(s));
 }
 
-/**
- * 스킬 재사용 시간 감소로 늘어나는 DPS 배율.
- * 강렬·초월 각각 상한 35%로 가동률 1/(1-쿨감)을 구해 딜 점유율로 평균 내고, 보정 상수만큼만 DPS에 반영한다.
- */
-export function cdrMult(s) {
-  const up = c => 1 / (1 - Math.min(Math.max(c || 0, 0), CDR_CAP));
-  let wc = s.share_cho == null ? 1 : s.share_cho, wg = s.share_gang || 0;
-  if (wc + wg <= 0) wc = 1;
-  const uptime = (wc * up(s.cdr_cho) + wg * up(s.cdr_gang)) / (wc + wg);
-  return 1 + CDR_DPS_K * (uptime - 1);
-}
-
 /** HP 50% 초과/이하 구간을 절반씩 싸운다고 보고 평균 낸 배율. extra는 전직 패시브의 구간별 최종 데미지 */
 function hpMultiplier(over, under, extraOver, extraUnder) {
   return 0.5 * (1 + over) * prod(extraOver || []) + 0.5 * (1 + under) * prod(extraUnder || []);
@@ -141,7 +129,7 @@ export function dpsIndex(s) {
   if (hasMaxi(s)) x *= maxiMult(maxiFinal(s), s.A, s.A_max);
   x *= hpMultiplier(s.hp_over || 0, s.hp_under || 0, s.hp3_over, s.hp3_under);
   if (has(s, "adapt")) x *= adaptMult(s);
-  if (has(s, "cdr_gang") || has(s, "cdr_cho")) x *= cdrMult(s);
+  // 스킬 재사용 시간 감소(cdr_gang, cdr_cho)는 DPS에 넣지 않는다 (js/data/rules.js 의 CDR_CAP 참고)
   return x;
 }
 

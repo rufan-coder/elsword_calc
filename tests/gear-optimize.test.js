@@ -68,6 +68,35 @@ test("자동 찾기: 고정하지 않은 아트마 칸에 아트마를 끼우면
   }
 });
 
+test("자동 찾기: 쿨감은 DPS에 안 넣고, 목표 초월 쿨감 아래로는 내려가지 않게 한다", () => {
+  // 쿨감 5% 악세 3개를 낀 상태. 목표가 없으면 쿨감 악세를 빼서 쿨감이 내려가도 DPS만 본다
+  const now = Object.assign(emptyGear(), {
+    weapon: "사룡무",
+    avatar: { arm: "화랑연가 : 충의의 완갑", neck: "드리밍 오토마타 : 인형의 브로치", support: "그란디플로라 : 환희의 샹들리에" },
+    normal: { weapon: "Type-Q 여왕의 훈장", support: "운명의 예언서", bottom: "영혼의 족쇄", ear: "글리터의 훈장" },
+  });
+  const free = optimizeGear(ctx, now);
+  const kept = optimizeGear(ctx, now, { cdrTarget: 0.32 });
+  const high = optimizeGear(ctx, now, { cdrTarget: 0.36 });
+  assert.ok(free.cdr < 0.32);                                   // 목표가 없으면 쿨감은 신경 쓰지 않는다
+  assert.ok(kept.cdrMet && kept.cdr >= 0.32 - 1e-9);
+  assert.ok(high.cdrMet && high.cdr >= 0.36 - 1e-9);
+  assert.ok(free.gain >= kept.gain - 1e-12 && kept.gain >= high.gain - 1e-12);   // 조건이 빡빡할수록 DPS는 같거나 낮다
+  // 쿨감 악세를 바꿔도 DPS 변화에는 쿨감 몫이 없다
+  const sc = gearScorer(ctx, now);
+  const noCdr = structuredClone(now); noCdr.avatar.arm = null;
+  const both = structuredClone(noCdr); both.avatar.arm = "화랑연가 : 충의의 완갑";
+  near(sc.evaluate(both).value, sc.evaluate(now).value, 12);
+  assert.equal(sc.evaluate(noCdr).shifted.win.cdr_cho.toFixed(4), "0.2700");
+});
+
+test("자동 찾기: 목표를 맞출 수 없으면 가장 가깝게 맞추고 알려 준다", () => {
+  const locked = LOCKABLE.filter(k => k !== "avatar.arm");   // 팔 한 칸만 바꿀 수 있다 -> 쿨감은 많아야 +5%
+  const r = optimizeGear(ctx, NOW, { locked, cdrTarget: 0.40 });
+  assert.equal(r.cdrMet, false);
+  near(r.cdr, 0.37, 10);
+});
+
 test("상한 초과: 적응력은 마을 버프 포함 60%, 쿨감 35%, 양극화 60%를 넘은 만큼", () => {
   const o = capOver({ adapt: 0.59, cdr_gang: 0.36, cdr_cho: 0.30, polar: 0.65 }, { town_adapt: 0.03 });
   near(o.adapt, 0.02, 10); near(o.cdr_gang, 0.01, 10); near(o.polar, 0.05, 10);

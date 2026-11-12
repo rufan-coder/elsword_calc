@@ -26,9 +26,7 @@ export const OPTION_KINDS = {
   hp100: { label: "HP 100% 이하 적 데미지", delta: v => ({ hp100: v }), needs: "hp100" },
   adapt: { label: "적응력", delta: v => ({ adapt: v }), needs: "adapt" },
   super_adapt: { label: "초적응력", delta: v => ({ super_adapt: v }), needs: "adapt" },
-  cdr_all: { label: "모든 스킬 재사용 시간 감소", delta: v => ({ cdr_gang: v, cdr_cho: v }), needs: "cdr" },
-  cdr_gang: { label: "강렬한 스킬 재사용 시간 감소", delta: v => ({ cdr_gang: v }), needs: "cdr" },
-  cdr_cho: { label: "초월한 스킬 재사용 시간 감소", delta: v => ({ cdr_cho: v }), needs: "cdr" },
+  // 스킬 재사용 시간 감소는 DPS에 넣지 않아서 비교할 옵션에도 없다
 };
 
 /** 실전 수치 base에 변화량 delta를 더한 새 수치 */
@@ -52,7 +50,6 @@ function missingFor(needs, s) {
   if (needs === "atk_pct") return has(s, "atk_pct") ? null : "공격력, 최댓값, 무기 공격력";
   if (needs === "skill") return (has(s, "cho") || has(s, "gang")) ? null : "초월·강렬 스킬 데미지";
   if (needs === "adapt") return has(s, "adapt") ? null : "적응력";
-  if (needs === "cdr") return (has(s, "cdr_gang") || has(s, "cdr_cho")) ? null : "스킬 재사용 시간 감소";
   return has(s, needs) ? null : OPTION_KINDS[needs] ? OPTION_KINDS[needs].label : needs;
 }
 

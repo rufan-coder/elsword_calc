@@ -133,6 +133,8 @@ button.primary { background: var(--accent); border-color: var(--accent); color: 
 button.primary:hover { filter: brightness(1.08); }
 button:disabled { opacity: .6; cursor: progress; }
 .opt-hint { margin-bottom: 4px; }
+.cdr-target { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0 0 8px; font-size: 13px; }
+.cdr-target .unit { width: 96px; }
 .opt-status { margin: 6px 0 0; padding: 8px 11px; border-radius: 8px; background: var(--accent-soft); font-size: 12.5px; }
 .opt-status[hidden] { display: none; }
 /* 상한을 넘은 양 */
