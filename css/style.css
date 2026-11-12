@@ -1,16 +1,16 @@
 /* 레이아웃: 왼쪽에 입력(캐릭터 → 스탯창 → 버프), 오른쪽에 결과(실전 수치 → 도구 탭)를 두는 2단 구성. 좁은 화면에서는 한 줄로 쌓인다. */
 :root {
   --bg: #f3f4f9; --panel: #ffffff; --panel-2: #f8f9fd; --fg: #1a1d2b; --muted: #5d6479; --line: #dcdfeb;
-  --accent: #3550c8; --accent-soft: #e6eafc; --best: #b7791f; --best-soft: #fdf3dc; --warn: #b4441f; --bar: #8fa0ea; --bar-best: #d69e2e;
+  --accent: #3550c8; --accent-soft: #e6eafc; --best: #b7791f; --best-soft: #fdf3dc; --warn: #b4441f; --bar: #8fa0ea; --bar-best: #d69e2e; --over: #d0342c;
   --font-display: "IBM Plex Sans KR", "Noto Sans KR", system-ui, sans-serif;
   --font-body: "Noto Sans KR", system-ui, -apple-system, "Malgun Gothic", sans-serif;
 }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
   --bg: #12141d; --panel: #1b1e2a; --panel-2: #212534; --fg: #e9ebf4; --muted: #a0a7bd; --line: #30354a;
-  --accent: #8fa2ff; --accent-soft: #262d4d; --best: #f0c060; --best-soft: #3a3018; --warn: #ff9a76; --bar: #5c6fc4; --bar-best: #d8a53a; color-scheme: dark } }
+  --accent: #8fa2ff; --accent-soft: #262d4d; --best: #f0c060; --best-soft: #3a3018; --warn: #ff9a76; --bar: #5c6fc4; --bar-best: #d8a53a; --over: #ff7b72; color-scheme: dark } }
 :root[data-theme="dark"] {
   --bg: #12141d; --panel: #1b1e2a; --panel-2: #212534; --fg: #e9ebf4; --muted: #a0a7bd; --line: #30354a;
-  --accent: #8fa2ff; --accent-soft: #262d4d; --best: #f0c060; --best-soft: #3a3018; --warn: #ff9a76; --bar: #5c6fc4; --bar-best: #d8a53a; color-scheme: dark }
+  --accent: #8fa2ff; --accent-soft: #262d4d; --best: #f0c060; --best-soft: #3a3018; --warn: #ff9a76; --bar: #5c6fc4; --bar-best: #d8a53a; --over: #ff7b72; color-scheme: dark }
 
 * { box-sizing: border-box; }
 html, body { margin: 0; }
@@ -128,11 +128,23 @@ tr.best .bar { background: var(--bar-best); }
 footer { color: var(--muted); font-size: 12px; margin-top: 22px; }
 
 /* 악세 세팅 */
-.gear-tools { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 4px; }
+.gear-tools { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--panel); font-weight: 600; }
+button.primary:hover { filter: brightness(1.08); }
+button:disabled { opacity: .6; cursor: progress; }
+.opt-hint { margin-bottom: 4px; }
+.opt-status { margin: 6px 0 0; padding: 8px 11px; border-radius: 8px; background: var(--accent-soft); font-size: 12.5px; }
+.opt-status[hidden] { display: none; }
+/* 상한을 넘은 양 */
+.over { color: var(--over); font-weight: 600; font-size: 11.5px; white-space: nowrap; }
+table.gear-out .over { display: block; line-height: 1.3; }
+.tile .from .over { font-size: 11.5px; }
 table.gear { table-layout: fixed; }
 table.gear th:first-child, table.gear td.lbl { width: 84px; }
 table.gear td { padding: 4px 6px 4px 0; border-top: 0; }
 table.gear td:last-child, table.gear th:last-child { padding-right: 0; }
+table.gear th.lock, table.gear td.lock { width: 36px; text-align: center; }
+table.gear td.lock input { width: 16px; height: 16px; margin: 0; cursor: pointer; accent-color: var(--accent); }
 table.gear td.lbl { font-size: 13px; white-space: nowrap; }
 table.gear select { padding: 5px 7px; font-size: 13px; }
 table.gear tr.atma td { padding-bottom: 8px; }
@@ -144,10 +156,11 @@ table.gear tr.atma td { padding-bottom: 8px; }
 /* 좁은 화면: "바꿔 보기"를 "지금" 아래 줄로 내린다 */
 @media (max-width: 600px) {
   table.gear thead { display: none; }
-  table.gear tr { display: grid; grid-template-columns: 64px minmax(0, 1fr); column-gap: 6px; padding: 6px 0; border-top: 1px solid var(--line); }
+  table.gear tr { display: grid; grid-template-columns: 64px minmax(0, 1fr) 28px; column-gap: 6px; padding: 6px 0; border-top: 1px solid var(--line); }
   table.gear td { padding: 0; }
   table.gear td.lbl { width: auto; white-space: normal; font-size: 12px; grid-row: span 2; align-self: center; }
   table.gear td.next { grid-column: 2; margin-top: 4px; }
+  table.gear td.lock { grid-column: 3; grid-row: 1 / span 2; align-self: center; width: auto; }
   table.gear td.next .pick::before { content: "→"; color: var(--muted); align-self: center; padding: 0 2px; }
 }
 /* 좁은 화면에서 결과가 표 아래로 밀려나므로, 아래에 DPS 변화를 띄워 둔다 */

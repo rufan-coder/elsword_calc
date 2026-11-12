@@ -1,10 +1,12 @@
 // "악세 세팅" 화면: 지금 낀 장비와 바꿔 볼 장비를 고르면 세트 효과까지 합친 DPS 변화를 보여 준다.
 // 캐릭터 창 스크린샷을 올리면 아이콘을 알아봐서 "지금" 칸을 채운다.
 
-import { $, esc, signed } from "./dom.js";
+import { $, esc, signed, trimPct } from "./dom.js";
 import { ACC_SLOTS, ACCESSORIES, NEW_ACCESSORIES, ARMOR_AVATARS, WEAPON_AVATARS, OUTFITS, WEAPONS, ATMA, AVATAR_SET_LIMIT } from "../data/accessories.js";
 import { ICONS } from "../data/icons.js";
 import { compareGear, emptyGear, STAT_NAMES, IGNORED } from "../calc/gear.js";
+import { optimizeGear } from "../calc/gear-optimize.js";
+import { capOver, CAP_NOTES } from "../calc/caps.js";
 import { findCharWindow, equipCells } from "../ocr/equip-window.js";
 import { matchCell, isEmptySlot, decodeFeature, encodeFeature, featureDistance, KEEP_BACKGROUND, MAX_DISTANCE } from "../ocr/icons.js";
 
@@ -21,6 +23,10 @@ const TABLES = [
   { title: "일반 악세", atma: true, rows: ACC_SLOTS.filter(s => s.key !== "ring").map(s => ["normal", s.key, slotName(s)]).concat([["normal", "ring", "반지 1"], ["normal", "ring2", "반지 2"]]) },
 ];
 const ROWS = TABLES.flatMap(t => t.rows);
+/** 줄의 "고정" 이름 (자동 찾기의 LOCKABLE 과 같은 이름). 무기 종류는 늘 그대로라 없다 */
+const lockKey = (group, slot) => group === "weapon" ? null : group === "wear" ? (slot === "set5" ? "armor" : slot) : `${group}.${slot}`;
+const LOCK_TITLE = "자동 찾기에서 지금 것을 그대로 둬요";
+const lockCell = (key, name) => `<td class="lock">${key ? `<input type="checkbox" id="gear-lock-${key}" data-lock="${key}" aria-label="${esc(name)} 고정" title="${LOCK_TITLE}">` : ""}</td>`;
 const ARMOR_PIECES = ["hair", "top", "bottom", "gloves", "shoes"];
 const ATMA_GRADED = ATMA.pieces.filter(s => s !== "top");   // 만다라는 등급이 이름에 들어 있다
 const SET_GRADES = ATMA.grades.slice(ATMA.grades.indexOf(ATMA.maxGrade));
@@ -57,12 +63,12 @@ const options = (list, first) => first.concat(list).map(([v, t]) => `<option val
 function buildTables() {
   let html = "";
   for (const table of TABLES) {
-    html += `<div class="sub">${table.title}</div><div class="tbl-wrap"><table class="gear"><thead><tr><th>부위</th><th>지금</th><th>바꿔 보기</th></tr></thead><tbody>`;
+    html += `<div class="sub">${table.title}</div><div class="tbl-wrap"><table class="gear"><thead><tr><th>부위</th><th>지금</th><th>바꿔 보기</th><th class="lock" title="${LOCK_TITLE}">고정</th></tr></thead><tbody>`;
     if (table.atma) {
       const els = ATMA.elements.map(e => [e, e]);
       html += `<tr class="atma"><td class="lbl">아트마 속성</td>` +
         `<td><div class="pick"><select id="gear-now-element" aria-label="지금 아트마 속성">${options(els, [])}</select></div></td>` +
-        `<td class="next"><div class="pick"><select id="gear-next-element" aria-label="바꿔 볼 아트마 속성">${options(els, [[SAME, "그대로"]])}</select></div></td></tr>`;
+        `<td class="next"><div class="pick"><select id="gear-next-element" aria-label="바꿔 볼 아트마 속성">${options(els, [[SAME, "그대로"]])}</select></div></td>${lockCell("element", "아트마 속성")}</tr>`;
     }
     for (const [group, slot, name] of table.rows) {
       const list = choices(group, slot), grade = group === "normal" && ATMA_GRADED.includes(slot);
@@ -70,10 +76,10 @@ function buildTables() {
       const none = group === "weapon" ? "그 밖의 무기" : "미착용";
       html += `<tr><td class="lbl">${name}</td>` +
         `<td><div class="pick"><select id="gear-now-${group}-${slot}" aria-label="지금 ${table.title} ${name}">${options(list, [["", none]])}</select>${gradeSel("now")}</div></td>` +
-        `<td class="next"><div class="pick"><select id="gear-next-${group}-${slot}" aria-label="바꿔 볼 ${table.title} ${name}">${options(list, [[SAME, "그대로"], ["", none]])}</select>${gradeSel("next")}</div></td></tr>`;
+        `<td class="next"><div class="pick"><select id="gear-next-${group}-${slot}" aria-label="바꿔 볼 ${table.title} ${name}">${options(list, [[SAME, "그대로"], ["", none]])}</select>${gradeSel("next")}</div></td>${lockCell(lockKey(group, slot), `${table.title} ${name}`)}</tr>`;
     }
     html += `</tbody></table></div>`;
-    if (table.title === "무기") html += `<p class="hint">레이드 무기는 같은 레이드 악세 세트 개수에 들어가요 (사룡무 → 공중요새의 유산, 암귀무 → 심연 레이드 세트). 스크린샷으로는 채우지 않으니 직접 골라 주세요.</p>`;
+    if (table.title === "무기") html += `<p class="hint">레이드 무기는 같은 레이드 악세 세트 개수에 들어가요 (사룡무 → 공중요새의 유산, 암귀무 → 심연 레이드 세트). 스크린샷으로는 채우지 않으니 직접 골라 주세요. 자동 찾기에서도 무기 종류는 그대로 둬요.</p>`;
     if (table.title === "아바타 악세") html += `<p class="hint">5셋은 레어 아바타 헤어·상의·하의·장갑·신발을 한 세트로 맞춰 입은 것이에요.</p>`;
   }
   $("gear-tables").innerHTML = html;
@@ -117,6 +123,28 @@ function syncGrades() {
   }
 }
 
+/** "고정"에 체크한 칸 이름들 */
+const readLocks = () => [...document.querySelectorAll("#gear-tables input[data-lock]")].filter(e => e.checked).map(e => e.dataset.lock);
+
+/** 자동 찾기 결과를 "바꿔 보기" 칸에 채운다. 지금과 같은 칸은 "그대로" */
+function fillNext(g) {
+  const now = readGear("now");
+  const wear = (x, slot) => slot === "outfit" ? x.outfit : slot === "wavatar" ? x.wavatar : x.armor.hair;
+  for (const [group, slot] of ROWS) {
+    if (group === "weapon") continue;
+    const want = (group === "wear" ? wear(g, slot) : g[group][slot]) || null;
+    const cur = (group === "wear" ? wear(now, slot) : now[group][slot]) || null;
+    const e = sel("next", group, slot);
+    e.value = want === cur ? SAME : (want || "");
+    e.classList.remove("filled", "check");
+  }
+  $("gear-next-element").value = g.atma.element === now.atma.element ? SAME : g.atma.element;
+  for (const slot of ATMA_GRADED) {
+    const same = g.normal[slot] === now.normal[slot] && g.atma.grades[slot] === now.atma.grades[slot];
+    $(`gear-next-grade-${slot}`).value = same || !isAtmaItem(g.normal[slot]) ? SAME : g.atma.grades[slot];
+  }
+}
+
 /** 결과에 보여 줄 스탯창 칸 (스펙 계산의 입력칸 순서) */
 const WINDOW_STATS = [
   ["crit", "크리티컬"], ["crit_dmg", "크리티컬 데미지"], ["maxi", "극대화"], ["atk_pct", "공격력 % (스텟)"], ["boss", "보스 데미지"],
@@ -133,10 +161,17 @@ let nowAvatarSets = null;
 const pctText = v => signed(v, 2).replace(/(\.\d*?)0+%$/, "$1%").replace(/\.%$/, "%");
 const stagesText = s => `${s.count}개 (${s.stages.join("·")}세트)`;
 
+let lastCtx = null;   // 자동 찾기가 쓰는 마지막 스탯창·버프 값
+const hasWindow = win => Object.keys(win).some(k => k !== "share_cho" && k !== "share_gang");
+
+/** 상한을 넘은 양: 빨간 글씨 "1% 초과" (크리·극대화는 실전 값 기준) */
+const overSpan = (over, k) => over[k] ? `<span class="over" title="${esc(CAP_NOTES[k])}">${k === "crit" || k === "maxi" ? "실전 " : ""}${trimPct(over[k])} 초과</span>` : "";
+
 export function renderGear({ win, job, resist, setup }) {
+  lastCtx = { win, job, resist, setup };
   syncGrades();
   const out = $("gear-out");
-  if (!Object.keys(win).some(k => k !== "share_cho" && k !== "share_gang")) {
+  if (!hasWindow(win)) {
     out.innerHTML = `<p class="hint">먼저 <a href="#spec">스펙 계산</a>에 스탯창 값을 넣어 주세요. 그 값을 기준으로 바꿨을 때의 차이를 계산해요.</p>`;
     $("gear-float").hidden = true;
     return;
@@ -177,9 +212,10 @@ export function renderGear({ win, job, resist, setup }) {
 
   // 스탯창 전체: 지금 -> 바꾼 뒤 (바뀐 줄은 굵게)
   const after = r.win, stat = x => (x * 100).toFixed(2) + "%";
+  const overNow = capOver(win, setup, job, resist), overAfter = capOver(after, setup, job, resist);
   const lines = WINDOW_STATS.filter(([k]) => typeof win[k] === "number").map(([k, name]) => {
     const d = after[k] - win[k], diff = Math.abs(d) > 5e-5;
-    return `<tr class="${diff ? "diff" : ""}"><td>${name}</td><td class="num">${stat(win[k])}</td><td class="num">${stat(after[k])}</td><td class="num">${diff ? pctText(d).replace("%", "%p") : ""}</td></tr>`;
+    return `<tr class="${diff ? "diff" : ""}"><td>${name}</td><td class="num">${stat(win[k])}${overSpan(overNow, k)}</td><td class="num">${stat(after[k])}${overSpan(overAfter, k)}</td><td class="num">${diff ? pctText(d).replace("%", "%p") : ""}</td></tr>`;
   });
   const prod = xs => xs.reduce((a, x) => a * (1 + x), 1), mult = x => "x" + x.toFixed(4).replace(/0+$/, "").replace(/\.$/, "");
   const hidden = [["크뎀 곱연산", prod(r.hidden.cd[0]), prod(r.hidden.cd[1])], ["최종 데미지", prod(r.hidden.final[0]), prod(r.hidden.final[1])]];
@@ -188,7 +224,8 @@ export function renderGear({ win, job, resist, setup }) {
     lines.push(`<tr class="hidden-stat ${diff ? "diff" : ""}"><td>${name} <span class="muted">(스탯창에 안 보임)</span></td><td class="num">${mult(b)}</td><td class="num">${mult(a)}</td><td class="num">${diff ? pctText(a / b - 1) : ""}</td></tr>`);
   }
   html += `<div class="sub">스탯창 (지금 → 바꾼 뒤)</div><div class="tbl-wrap"><table class="gear-out stats"><thead><tr><th>스탯</th><th class="num">지금</th><th class="num">바꾼 뒤</th><th class="num">변화</th></tr></thead><tbody>${lines.join("")}</tbody></table></div>` +
-    `<p class="hint">크리티컬·극대화는 점감이 다시 걸린 값이에요. 곱연 크뎀과 최종 데미지는 장비에서 나오는 배율만 따로 보여 줘요.</p>`;
+    `<p class="hint">크리티컬·극대화는 점감이 다시 걸린 값이에요. 곱연 크뎀과 최종 데미지는 장비에서 나오는 배율만 따로 보여 줘요.` +
+    (Object.keys(overNow).length || Object.keys(overAfter).length ? ` <span class="over">빨간 글씨</span>는 상한을 넘어서 DPS에 도움이 안 되는 만큼이에요 (적응력은 마을 버프 포함).` : "") + `</p>`;
 
   // 알림
   const notes = [];
@@ -208,7 +245,7 @@ function allSelects() { return [...document.querySelectorAll("#gear-tables selec
 const DEFAULT_WEAPON = "사룡무";
 
 function saveGear() {
-  const s = { v: 2, sel: Object.fromEntries(allSelects().map(e => [e.id, e.value])), avatarSets: nowAvatarSets };
+  const s = { v: 2, sel: Object.fromEntries(allSelects().map(e => [e.id, e.value])), avatarSets: nowAvatarSets, locks: readLocks() };
   try { localStorage.setItem(KEY, JSON.stringify(s)); } catch (e) { /* 저장이 막힌 환경 */ }
 }
 function loadGear() {
@@ -218,6 +255,7 @@ function loadGear() {
     if (s.v === 1 && s.sel && s.sel["gear-now-weapon-weapon"] === "") delete s.sel["gear-now-weapon-weapon"];   // 무기 기본값(사룡무)이 없던 때
     for (const e of allSelects()) if (s.sel && e.id in s.sel && [...e.options].some(o => o.value === s.sel[e.id])) e.value = s.sel[e.id];
     nowAvatarSets = Array.isArray(s.avatarSets) ? s.avatarSets : null;
+    if (Array.isArray(s.locks)) for (const e of document.querySelectorAll("#gear-tables input[data-lock]")) e.checked = s.locks.includes(e.dataset.lock);
   } catch (e) { /* 못 읽으면 처음 상태로 */ }
 }
 
@@ -341,6 +379,30 @@ export function initGear(onChange) {
     if (on.length > AVATAR_SET_LIMIT) { e.target.checked = false; on = on.filter(n => n !== e.target.value); }
     nowAvatarSets = on.length ? on : null;
     saveGear(); onChange();
+  });
+  $("gear-optimize").addEventListener("click", () => {
+    const st = $("gear-opt-status"), btn = $("gear-optimize");
+    st.hidden = false;
+    if (!lastCtx || !hasWindow(lastCtx.win)) { st.textContent = "먼저 스펙 계산에 스탯창 값을 넣어 주세요. 그 값으로 DPS를 계산해서 찾아요."; return; }
+    btn.disabled = true; st.textContent = "찾는 중이에요…";
+    setTimeout(() => {   // "찾는 중" 글자가 먼저 그려지게
+      try {
+        const t = performance.now();
+        const now = readGear("now");
+        const r = optimizeGear(lastCtx, now, { locked: readLocks() });
+        const sec = Math.max(0.1, (performance.now() - t) / 1000).toFixed(1);
+        fillNext(r.gear);
+        // 스탯창에는 지금 낀 장비 효과가 이미 들어 있어서, 지금 세팅이 비어 있으면 변화가 실제보다 크게 나온다
+        const worn = Object.values(now.avatar).concat(Object.values(now.normal)).filter(Boolean).length;
+        st.textContent = (r.gain > 1e-9
+          ? `가장 좋은 조합을 "바꿔 보기"에 채웠어요. 지금보다 DPS ${signed(r.gain)} · 세트 조합 ${r.plans.toLocaleString("ko-KR")}가지를 따져 봤어요 (${sec}초).`
+          : "지금 세팅이 이미 가장 좋아요.") +
+          (worn < 12 ? " 지금 세팅 칸이 많이 비어 있어서 변화가 실제보다 크게 나올 수 있어요. 지금 낀 것을 먼저 채워 주세요." : "");
+        saveGear(); onChange();
+      } catch (e) {
+        st.textContent = "찾다가 문제가 생겼어요. 새로고침한 뒤 다시 해 주세요.";
+      } finally { btn.disabled = false; }
+    }, 30);
   });
   $("gear-reset-next").addEventListener("click", () => {
     for (const e of allSelects()) if (e.id.startsWith("gear-next-")) e.value = SAME;

@@ -22,6 +22,7 @@ import { resolve, dpsIndex, has } from "./stats.js";
 const ACC_BY_NAME = new Map([...ACCESSORIES, ...NEW_ACCESSORIES].map(a => [a.name, a]));
 const WAVATAR_BY_NAME = new Map(WEAPON_AVATARS.map(w => [w.name, w]));
 const OUTFIT_BY_NAME = new Map(OUTFITS.map(o => [o.name, o]));
+const WEAPON_BY_NAME = new Map(WEAPONS.map(w => [w.name, w]));
 
 /** 계산기가 다루지 않는 효과 (보여 주기만) */
 export const IGNORED = { aspd: "동작 속도", extra_dmg: "추가 데미지", pdef_ign: "물리 방어 무시", mdef_ign: "마법 방어 무시", tough: "강인한 스킬 데미지", active: "액티브 스킬 데미지" };
@@ -44,28 +45,51 @@ function atmaGrade(item, slot, gear) {
   return m ? m[1] : (gear.atma.grades[slot] || "유니크");
 }
 
+/**
+ * 능력치 묶음을 계산에 쓰기 좋은 모양으로 한 번만 바꿔 둔다 (자동 찾기에서 수만 번 부르므로).
+ * [종류, 키, 값] 목록. 종류: 0 스탯창에 보이는 효과, 1 곱연 크뎀, 2 최종 데미지, 3 계산하지 않는 효과
+ */
+const PREPARED = { 물리: new WeakMap(), 마법: new WeakMap() };
+function prepared(stats, atkType) {
+  const cache = PREPARED[atkType] || PREPARED.물리;
+  let list = cache.get(stats);
+  if (list) return list;
+  list = [];
+  for (const [k, v] of Object.entries(stats)) {
+    if (k === "cd_mult") list.push([1, k, v]);
+    else if (k === "final") list.push([2, k, v]);
+    else if (k === "patk_pct" || k === "matk_pct") { if ((k === "patk_pct") === (atkType !== "마법")) list.push([0, "atk_pct", v]); }
+    else if (k === "patk" || k === "matk") continue;   // 고정 공격력은 무기 공격력에 비해 아주 작아서 뺀다
+    else if (IGNORED[k]) list.push([3, k, v]);
+    else list.push([0, k, v]);
+  }
+  cache.set(stats, list);
+  return list;
+}
+
 /** 효과 묶음에 다른 효과를 더한다 (곱연 크뎀·최종 데미지는 따로 모은다) */
 function addStats(acc, stats, atkType) {
-  for (const [k, v] of Object.entries(stats || {})) {
-    if (k === "cd_mult") acc.cdMults.push(v);
-    else if (k === "final") acc.finals.push(v);
-    else if (k === "patk_pct" || k === "matk_pct") { if ((k === "patk_pct") === (atkType === "물리")) acc.visible.atk_pct = (acc.visible.atk_pct || 0) + v; }
-    else if (k === "patk" || k === "matk") continue;   // 고정 공격력은 무기 공격력에 비해 아주 작아서 뺀다
-    else if (IGNORED[k]) acc.ignored[k] = (acc.ignored[k] || 0) + v;
-    else acc.visible[k] = (acc.visible[k] || 0) + v;
+  if (!stats) return;
+  for (const [kind, k, v] of prepared(stats, atkType)) {
+    if (kind === 0) acc.visible[k] = (acc.visible[k] || 0) + v;
+    else if (kind === 1) acc.cdMults.push(v);
+    else if (kind === 2) acc.finals.push(v);
+    else acc.ignored[k] = (acc.ignored[k] || 0) + v;
   }
 }
 
 /** 세트 개수 세기 */
-function countSets(gear) {
+export function countSets(gear) {
   const count = new Map(), bump = name => { if (name && name !== "없음") count.set(name, (count.get(name) || 0) + 1); };
   for (const name of Object.values(gear.avatar)) { const a = ACC_BY_NAME.get(name); if (a) bump(a.set); }
   for (const name of Object.values(gear.normal)) { const a = ACC_BY_NAME.get(name); if (a && !a.atma) bump(a.set); }
   const w = WAVATAR_BY_NAME.get(gear.wavatar); if (w) bump(w.set);
-  const weapon = WEAPONS.find(x => x.name === gear.weapon); if (weapon) bump(weapon.set);
+  const weapon = WEAPON_BY_NAME.get(gear.weapon); if (weapon) bump(weapon.set);
   for (const set of Object.values(gear.armor)) if (SETS[set]) bump(set);
   return count;
 }
+
+const STAGE_NUMS = Object.fromEntries(Object.entries(SETS).map(([n, s]) => [n, Object.keys(s.stages).map(Number)]));
 
 /** 켜지는 세트 단계들: [{ name, kind, count, stages: [2, 3] }] */
 function setStages(count) {
@@ -73,7 +97,7 @@ function setStages(count) {
   for (const [name, n] of count) {
     const s = SETS[name];
     if (!s) continue;
-    const stages = Object.keys(s.stages).map(Number).filter(k => k <= n);
+    const stages = STAGE_NUMS[name].filter(k => k <= n);
     if (stages.length) out.push({ name, kind: s.kind, count: n, stages });
   }
   return out;
@@ -181,24 +205,38 @@ function bestAvatarChoice(gear, score) {
 }
 
 /**
+ * 지금 장착(before)을 기준으로 다른 장착을 평가하는 함수들 (교체 비교와 자동 찾기가 같이 쓴다).
+ * 반환: {
+ *   before,
+ *   evaluate(afterGear) -> { fx, shifted, value: 지금 대비 DPS 배율 }
+ *   valueOf(fx)         -> 효과 묶음 { visible, cdMults, finals } 의 지금 대비 DPS 배율 (자동 찾기가 스탯별 가치를 잴 때 쓴다)
+ * }
+ */
+export function gearScorer(ctx, beforeGear) {
+  const { win, job, resist, setup } = ctx, atkType = job ? job.type : "물리";
+  const before = gearEffects(beforeGear, atkType, beforeGear.avatarSets);
+  const baseDps = dps(win, job, resist, setup, before);
+  const valueOf = fx => dps(shiftWindow(win, minus(fx.visible, before.visible)).win, job, resist, setup, fx) / baseDps;
+  const afterFor = (g, choice) => {
+    const fx = gearEffects(g, atkType, choice);
+    const shifted = shiftWindow(win, minus(fx.visible, before.visible));
+    return { fx, shifted, value: dps(shifted.win, job, resist, setup, fx) / baseDps };
+  };
+  // 바꾼 쪽은 사용자가 고르지 않았으면 가장 좋은 무악 세트 조합을 고른다
+  const evaluate = g => afterFor(g, g.avatarSets || bestAvatarChoice(g, names => afterFor(g, names).value));
+  return { before, evaluate, valueOf };
+}
+
+/**
  * 지금 장착(before)과 바꾼 장착(after) 비교.
  * ctx: { win, job, resist, setup } (화면의 스탯창 값과 버프 세팅)
  * 반환: { gain, before, after, delta: 보이는 효과 변화, blank: 스탯창이 비어 반영 못 한 효과, win: 바꾼 뒤 스탯창 }
  */
 export function compareGear(ctx, beforeGear, afterGear) {
-  const { win, job, resist, setup } = ctx, atkType = job ? job.type : "물리";
-  const before = gearEffects(beforeGear, atkType, beforeGear.avatarSets);
-  const baseDps = dps(win, job, resist, setup, before);
-  const afterFor = choice => {
-    const fx = gearEffects(afterGear, atkType, choice);
-    const shifted = shiftWindow(win, minus(fx.visible, before.visible));
-    return { fx, shifted, value: dps(shifted.win, job, resist, setup, fx) };
-  };
-  // 바꾼 쪽은 사용자가 고르지 않았으면 가장 좋은 무악 세트 조합을 고른다
-  const choice = afterGear.avatarSets || bestAvatarChoice(afterGear, names => afterFor(names).value);
-  const after = afterFor(choice);
+  const { before, evaluate } = gearScorer(ctx, beforeGear);
+  const after = evaluate(afterGear);
   return {
-    gain: after.value / baseDps - 1,
+    gain: after.value - 1,
     before, after: after.fx,
     delta: minus(after.fx.visible, before.visible),
     hidden: { cd: [before.cdMults, after.fx.cdMults], final: [before.finals, after.fx.finals] },
