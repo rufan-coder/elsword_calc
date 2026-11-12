@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@500;600;700&family=Noto+Sans+KR:wght@400;500;700&display=swap">
 <link rel="stylesheet" href="css/style.css">
-<meta name="build" content="2026-11-12.2">
+<meta name="build" content="2026-11-12.4">
 <script>
 // 배포 직후에는 브라우저에 새 파일과 예전 파일이 섞여 남을 수 있다 (js/build.js 참고).
 // 그 상태로 열려서 시작 중에 오류가 나면, 이 페이지가 쓰는 파일을 전부 새로 받아 딱 한 번만 다시 연다.
@@ -95,7 +95,15 @@
           <div class="field"><label for="hp100">HP 100% 이하 적 데미지</label><div class="unit"><input type="number" id="hp100" step="0.01" inputmode="decimal"><span>%</span></div></div>
           <div class="field"><label for="share_cho">초월 스킬 딜 점유율<span class="tag">직접 입력</span></label><div class="unit"><input type="number" id="share_cho" step="1" min="0" max="100" inputmode="decimal"><span>%</span></div></div>
         </div>
-        <p class="hint" style="margin-top:10px">초월 점유율은 게임에서 보이는 딜 비중 기준이에요. 나머지는 강렬 스킬로 계산해요. 비교할 옵션과 상관없는 칸은 비워둬도 돼요.</p>
+        <div class="sub">적응력 · 재사용 시간</div>
+        <div class="grid">
+          <div class="field"><label for="adapt">적응력</label><div class="unit"><input type="number" id="adapt" step="0.01" inputmode="decimal"><span>%</span></div></div>
+          <div class="field"><label for="super_adapt">초적응력</label><div class="unit"><input type="number" id="super_adapt" step="0.01" inputmode="decimal"><span>%</span></div></div>
+          <div class="field"><label for="cdr_gang">강렬한 스킬 재사용 시간 감소</label><div class="unit"><input type="number" id="cdr_gang" step="0.01" inputmode="decimal"><span>%</span></div></div>
+          <div class="field"><label for="cdr_cho">초월한 스킬 재사용 시간 감소</label><div class="unit"><input type="number" id="cdr_cho" step="0.01" inputmode="decimal"><span>%</span></div></div>
+        </div>
+        <p class="hint" style="margin-top:10px">적응력은 던전의 마계 디버프와 비교해 계산해요 (적응력은 60%까지, 초적응력은 그 위에 더해져요). 재사용 시간 감소는 35%까지만 적용돼요.</p>
+        <p class="hint" style="margin-top:6px">초월 점유율은 게임에서 보이는 딜 비중 기준이에요. 나머지는 강렬 스킬로 계산해요. 비교할 옵션과 상관없는 칸은 비워둬도 돼요.</p>
       </section>
 
       <section class="panel">

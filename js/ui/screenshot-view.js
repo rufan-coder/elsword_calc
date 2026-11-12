@@ -8,6 +8,7 @@ import { recognizeShot } from "../ocr/recognize.js";
 const FIELDS = {
   crit: "크리티컬 확률", crit_dmg: "크리티컬 데미지", maxi: "극대화", A: "공격력", A_max: "극대화 범위 내 최댓값", boss: "보스 데미지", all_skill: "모든 스킬 데미지",
   cho: "초월한 스킬 데미지", gang: "강렬한 스킬 데미지", polar: "양극화", add: "추가 피해", hp_over: "HP 50% 초과", hp_under: "HP 50% 이하", hp100: "HP 100% 이하",
+  adapt: "적응력", super_adapt: "초적응력", cdr_gang: "강렬한 스킬 재사용 시간 감소", cdr_cho: "초월한 스킬 재사용 시간 감소",
 };
 
 let busy = false;

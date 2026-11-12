@@ -1,5 +1,5 @@
 // 던전별 환경 수치.
-//   debuff     : 마계 디버프 (지금 계산에는 쓰지 않고 참고용으로만 둔다)
+//   debuff     : 마계 디버프. 적응력으로 막지 못한 만큼 데미지가 줄어든다
 //   critResist : 크리티컬 저항. 최종 크리티컬 확률에서 그대로 빠진다
 export const DUNGEONS = {
   "네블론 레이드": { debuff: 0.95, critResist: 0.30 },

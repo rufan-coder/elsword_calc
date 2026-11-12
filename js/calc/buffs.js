@@ -18,13 +18,13 @@ export function encourage(stoneCdr, stoneDur) {
  * 반환: { setup, detail } - detail은 화면에 "적용 값"으로 보여 주기 위한 중간 수치
  */
 export function buildSetup(choice) {
-  const town = TOWN_BUFFS[choice.town] || { crit: 0, maxi: 0 };
+  const town = TOWN_BUFFS[choice.town] || { crit: 0, maxi: 0, adapt: 0, boss: 0 };
   const yellow = choice.yellow ? YELLOW_ARTIFACT : 0;
   const pants = (ENHANCE_BASE_PERCENT + (choice.pantsEnhance || 0)) / 100;
   const shoes = (ENHANCE_BASE_PERCENT + (choice.shoesEnhance || 0)) / 100;
   const enc = encourage(choice.stoneCdr || 0, choice.stoneDur || 0);
   const setup = {
-    town_crit: town.crit, town_maxi: town.maxi,
+    town_crit: town.crit, town_maxi: town.maxi, town_adapt: town.adapt || 0, town_boss: town.boss || 0,
     crit_mults: [pants, yellow], maxi_mults: [shoes, yellow],
     cd_base_mults: [PARTY_CRIT_DAMAGE],
     guild_boss: GUILD_BOSS_DAMAGE,

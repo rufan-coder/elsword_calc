@@ -21,7 +21,10 @@ test("라벨 맞추기: 앞에 붙은 잡글자와 약간의 오타는 견딘다
 
 test("라벨 맞추기: 비슷한 이름을 서로 헷갈리지 않는다", () => {
   assert.equal(matchLabel("하이퍼 스킬 데미지 증가").field, null);       // 모든 스킬 데미지가 아님
-  assert.equal(matchLabel("강렬한 스킬 재사용 시간 감소").field, null);   // 강렬한 스킬 데미지가 아님
+  assert.equal(matchLabel("강렬한 스킬 재사용 시간 감소").field, "cdr_gang");   // 강렬한 스킬 데미지가 아님
+  assert.equal(matchLabel("초월한 스킬 재사용 시간 감소").field, "cdr_cho");
+  assert.equal(matchLabel("적응력").field, "adapt");
+  assert.equal(matchLabel("초적응력").field, "super_adapt");                    // "적응력"이 들어 있어도 초적응력
   assert.equal(matchLabel("보스에게 받는 피해 감소").field, null);
   assert.equal(matchLabel("적 마법 방어력 무시").field, null);            // 마법 공격력이 아님
   assert.equal(matchLabel("초적응력").pat, "초적응력");

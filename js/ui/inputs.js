@@ -42,5 +42,6 @@ export function readInputs() {
     pantsEnhance: num("pants") || 0, shoesEnhance: num("shoes") || 0,
     stoneCdr: pctOrZero("enc_cdr"), stoneDur: pctOrZero("enc_dur"),
   });
+  setup.debuff = DUNGEONS[dungeon].debuff;   // 적응력 계산에 쓴다
   return { cls, job: CLASS[cls], dungeon, resist: DUNGEONS[dungeon].critResist, win, setup, buffs: detail, shareBlank: $("share_cho").value === "" };
 }

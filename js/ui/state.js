@@ -7,7 +7,8 @@ import { DUNGEONS } from "../data/dungeons.js";
 import { STONES, SLOT_BASE } from "../data/stones.js";
 
 /** 스탯창 값 입력칸 (id) */
-export const STAT_IDS = ["crit", "crit_dmg", "maxi", "A", "A_max", "W", "boss", "all_skill", "cho", "gang", "share_cho", "polar", "add", "hp_over", "hp_under", "hp100"];
+export const STAT_IDS = ["crit", "crit_dmg", "maxi", "A", "A_max", "W", "boss", "all_skill", "cho", "gang", "share_cho", "polar", "add", "hp_over", "hp_under", "hp100",
+  "adapt", "super_adapt", "cdr_gang", "cdr_cho"];
 /** 버프 세팅 입력칸 */
 const SETUP_IDS = ["town", "yellow", "pants", "shoes", "enc_cdr", "enc_dur"];
 /** 크극·소켓 최적화 탭의 입력칸 */
@@ -20,6 +21,7 @@ export const DEFAULTS = {
   cls: "트윈즈 피카로", field: "네블론 레이드",
   crit: 83, crit_dmg: 199.4, maxi: 65.12, A: 124266, A_max: 169166, W: 44020, boss: 190, all_skill: 127.5, cho: 130.1, gang: 100.1,
   share_cho: 95, polar: 59.2, add: 91.5, hp_over: 34, hp_under: 34, hp100: 41.5,
+  adapt: 59, super_adapt: 10, cdr_gang: 32, cdr_cho: 32,
   town: "온천 버프", yellow: "1", pants: 11, shoes: 11,
   enc_cdr: 30, enc_dur: 0,
   ckb_boss: "2.5", ckb_min: 25, sk_neb: "0", sk_slots: SLOT_BASE, sk_boss_target: "boss", sk_atma: "1",   // 힘트마 기준이면 아트마 사용은 O로 고정
@@ -60,6 +62,7 @@ export function readSaved() {
     if (saved.sk_neb == null) saved.sk_slots = DEFAULTS.sk_slots;       // 네블론 선택이 없던 때
     if (!("sk_cnt_boss2" in saved)) saved.sk_cnt_boss2 = "";            // 보뎀을 힘트마·사냥석으로 나누기 전
     if (!("sk_cnt_crit" in saved)) for (const s of STONES) saved["sk_cnt_" + s.key] = "";   // 칸 수 대신 수치 합을 받던 때
+    if (!("adapt" in saved)) for (const id of ["adapt", "super_adapt", "cdr_gang", "cdr_cho"]) saved[id] = "";   // 적응력·쿨감 칸이 없던 때 (예시 값이 섞이지 않게 비움)
     return Object.assign({}, DEFAULTS, saved);
   } catch (e) { return null; }
 }

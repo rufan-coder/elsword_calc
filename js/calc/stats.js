@@ -2,13 +2,16 @@
 //
 // 여기서 쓰는 값의 모양
 //   win   : 스탯창에 보이는 값. 확률·증가량은 비율(0.83 = 83%), 공격력은 그대로.
-//           { crit, crit_dmg, maxi, A, A_max, W, boss, all_skill, cho, gang, share_cho, share_gang, polar, add, hp_over, hp_under, hp100 }
+//           { crit, crit_dmg, maxi, A, A_max, W, boss, all_skill, cho, gang, share_cho, share_gang, polar, add, hp_over, hp_under, hp100,
+//             adapt, super_adapt, cdr_gang, cdr_cho }
 //   job   : 전직 패시브 (js/data/classes.js 의 한 항목). 없으면 NO_PASSIVE
 //   setup : 스탯창에 안 보이는 버프 묶음 (js/calc/buffs.js 의 buildSetup 결과)
-//           { town_crit, town_maxi, crit_mults[], maxi_mults[], cd_base_mults[], guild_boss, enc_uptime }
+//           { town_crit, town_maxi, town_adapt, town_boss, crit_mults[], maxi_mults[], cd_base_mults[], guild_boss, enc_uptime,
+//             debuff }   debuff 는 던전의 마계 디버프 (화면에서 고른 던전 값을 넣는다)
 
 import { critFromStat, statFromCrit, maxiFromStat, statFromMaxi } from "./diminish.js";
 import { ENCOURAGE } from "../data/buffs.js";
+import { ADAPT_CAP, CDR_CAP, CDR_DPS_K } from "../data/rules.js";
 
 export const prod = xs => xs.reduce((a, x) => a * (1 + x), 1);   // Π(1 + x)
 export const sum = xs => xs.reduce((a, x) => a + x, 0);
@@ -65,6 +68,28 @@ export function preShares(shareGang, shareCho, gang, cho) {
   return g + c > 0 ? [g / (g + c), c / (g + c)] : [0, 1];
 }
 
+/** 최종 적응력 = min(적응력 + 마을 버프, 60%) + 초적응력 */
+export function adaptFinal(s) {
+  return Math.min((s.adapt || 0) + (s.adapt_add || 0), ADAPT_CAP) + (s.super_adapt || 0);
+}
+
+/** 마계 디버프 중 적응력으로 못 막은 만큼 데미지가 줄어든다: 1 - max(0, 디버프 - 최종 적응력) */
+export function adaptMult(s) {
+  return 1 - Math.max(0, (s.debuff || 0) - adaptFinal(s));
+}
+
+/**
+ * 스킬 재사용 시간 감소로 늘어나는 DPS 배율.
+ * 강렬·초월 각각 상한 35%로 가동률 1/(1-쿨감)을 구해 딜 점유율로 평균 내고, 보정 상수만큼만 DPS에 반영한다.
+ */
+export function cdrMult(s) {
+  const up = c => 1 / (1 - Math.min(Math.max(c || 0, 0), CDR_CAP));
+  let wc = s.share_cho == null ? 1 : s.share_cho, wg = s.share_gang || 0;
+  if (wc + wg <= 0) wc = 1;
+  const uptime = (wc * up(s.cdr_cho) + wg * up(s.cdr_gang)) / (wc + wg);
+  return 1 + CDR_DPS_K * (uptime - 1);
+}
+
 /** HP 50% 초과/이하 구간을 절반씩 싸운다고 보고 평균 낸 배율. extra는 전직 패시브의 구간별 최종 데미지 */
 function hpMultiplier(over, under, extraOver, extraUnder) {
   return 0.5 * (1 + over) * prod(extraOver || []) + 0.5 * (1 + under) * prod(extraUnder || []);
@@ -90,7 +115,8 @@ export function resolve(win, job, critResist, setup) {
     s.maxi_mults = setup.maxi_mults.concat([c.maxi_m]);
     s.maxi_adds = [c.maxi_a];
   }
-  if (has(s, "boss")) s.boss = s.boss + setup.guild_boss + c.boss;
+  if (has(s, "boss")) s.boss = s.boss + setup.guild_boss + c.boss + (setup.town_boss || 0);
+  if (has(s, "adapt")) { s.adapt_add = setup.town_adapt || 0; s.debuff = setup.debuff || 0; }
   for (const k of ["gang", "cho"]) if (has(s, k)) s[k] += c[k];
   s.hp3_over = [c.hp_over]; s.hp3_under = [c.hp_under];
   return s;
@@ -114,6 +140,8 @@ export function dpsIndex(s) {
   if (hasCrit(s)) { const p = critFinal(s); x *= 1 - p + p * s.crit_dmg; }
   if (hasMaxi(s)) x *= maxiMult(maxiFinal(s), s.A, s.A_max);
   x *= hpMultiplier(s.hp_over || 0, s.hp_under || 0, s.hp3_over, s.hp3_under);
+  if (has(s, "adapt")) x *= adaptMult(s);
+  if (has(s, "cdr_gang") || has(s, "cdr_cho")) x *= cdrMult(s);
   return x;
 }
 
