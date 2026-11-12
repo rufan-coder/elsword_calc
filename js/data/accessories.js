@@ -16,7 +16,8 @@
 //     patk, matk (고정 공격력), aspd (동작 속도), extra_dmg (추가 데미지), pdef_ign, mdef_ign (방어 무시),
 //     tough (강인한 스킬 데미지), active (액티브 스킬 데미지)
 // 시트의 "시줌 잠재 추가효과" 칸은 옮기지 않았다.
-// 이름은 시트를 따르되, 게임 표기와 다른 셋은 게임 표기로 고쳤다 (선장의 트리코른, 바리온의 털장식, 어둠의 기운이 담긴 헤일로).
+// 이름은 시트를 따르되, 게임 표기와 다른 둘은 게임 표기로 고쳤다 (선장의 트리코른, 바리온의 털장식).
+// 실제로 거의 쓰지 않는 악세 17개는 목록을 짧게 하려고 뺐다 (README 업데이트 2026-11-12.10).
 
 /** 악세 부위. 부위마다 아바타 악세(무악) 한 칸과 일반 악세 한 칸이 따로 있다. 반지는 일반 악세만 두 칸 */
 export const ACC_SLOTS = [
@@ -41,8 +42,6 @@ export const AVATAR_SET_LIMIT = 3;
  *           게임 이름은 등급에 따라 앞말이 다르다 (장엄한 = 레전드리, 찬란한 = 유니크, 정제된 = 엘리트). 시트에는 대표 이름 하나만 있다
  */
 export const ACCESSORIES = [
-  { name: "엘리아노드 웨폰가드", slot: "weapon", layer: "normal", set: "없음", stats: {} },
-  { name: "강인한 투사의 크로니클", slot: "weapon", layer: "normal", set: "없음", stats: { crit: 0.01, extra_dmg: 0.01 } },
   { name: "화마의 인장", slot: "weapon", layer: "normal", set: "바니미르 레이드 세트", stats: { all_skill: 0.1 } },
   { name: "암귀의 문장", slot: "weapon", layer: "normal", set: "심연 레이드 세트", stats: { all_skill: 0.15 } },
   { name: "Type-Q 여왕의 훈장", slot: "weapon", layer: "normal", set: "공중요새의 유산", stats: { all_skill: 0.18 } },
@@ -61,8 +60,6 @@ export const ACCESSORIES = [
   { name: "휴대용 에너지 코일", slot: "support", layer: "normal", set: "없음", stats: { crit_dmg: 0.03, adapt: 0.02 } },
   { name: "마족의 눈", slot: "support", layer: "normal", set: "바니미르 레이드 세트", stats: { crit_dmg: 0.05 } },
   { name: "플레가스의 형상", slot: "support", layer: "normal", set: "없음", stats: { adapt: 0.05 } },
-  { name: "기계 인형 헤드", slot: "support", layer: "normal", set: "없음", stats: { maxi: 0.1, adapt: 0.02 } },
-  { name: "둥실둥실 베티", slot: "support", layer: "normal", set: "없음", stats: { adapt: 0.02 } },
   { name: "몽연향로", slot: "support", layer: "normal", set: "심연 레이드 세트", stats: { adapt: 0.03 } },
   { name: "운명의 예언서", slot: "support", layer: "normal", set: "공중요새의 유산", stats: { crit_dmg: 0.05, adapt: 0.03 } },
   { name: "세크리드 나이츠 : 지고한 정의", slot: "face_top", layer: "avatar", set: "세크리드 나이츠 무악", stats: { patk: 30, matk: 30, aspd: 0.04 } },
@@ -77,7 +74,6 @@ export const ACCESSORIES = [
   { name: "침식된 가시뿔", slot: "face_top", layer: "normal", set: "없음", stats: { aspd: 0.03, adapt: 0.03, final: 0.1536 } },
   { name: "마에스트로 헤일로", slot: "face_top", layer: "normal", set: "없음", stats: { adapt: 0.02, cd_mult: 0.02, final: 0.1025 } },
   { name: "혼의 왕관", slot: "face_top", layer: "normal", set: "없음", stats: { adapt: 0.02, final: 0.05 } },
-  { name: "어둠의 기운이 담긴 헤일로", slot: "face_top", layer: "normal", set: "마스터로드 세트", stats: { crit_dmg: 0.005, all_skill: 0.005 } },
   { name: "타마칸의 인장", slot: "face_top", layer: "normal", set: "없음", stats: { adapt: 0.01 } },
   { name: "창해유주 : 지식의 가호", slot: "top", layer: "avatar", set: "창해유주 무악", stats: { patk: 40, matk: 40, crit: 0.04 } },
   { name: "원더 메르헨 : 심연의 거울", slot: "top", layer: "avatar", set: "원더 메르헨 무악", stats: { patk: 30, matk: 30, cdr_all: 0.05 } },
@@ -97,8 +93,6 @@ export const ACCESSORIES = [
   { name: "그란디플로라 : 요정의 날개", slot: "top", layer: "avatar", set: "그란디플로라 무악", stats: { patk: 50, matk: 50, polar: 0.01, add: 0.01 } },
   { name: "화랑연가 : 화랑의 날개옷", slot: "top", layer: "avatar", set: "화랑연가 무악", stats: { patk: 50, matk: 50, add: 0.02 } },
   { name: "팬텀 베일 : 길잡이의 외투", slot: "top", layer: "avatar", set: "팬텀 베일 무악", stats: { patk: 30, matk: 30, adapt: 0.02 } },
-  { name: "드라바키의 날개", slot: "top", layer: "normal", set: "없음", stats: {} },
-  { name: "강배 스위칭", slot: "top", layer: "normal", set: "없음", stats: { hp_over: 0.1, hp_under: 0.1 } },
   { name: "장엄한 연화세계 정령왕의 만다라 - OO의 니르바나(레전드리, 100강배)", slot: "top", layer: "normal", set: "연화세계 정령왕", atma: true, stats: { adapt: 0.03, add: 0.06, hp100: 0.1 } },
   { name: "장엄한 연화세계 정령왕의 만다라 - OO의 아트마(레전드리, 강배x)", slot: "top", layer: "normal", set: "연화세계 정령왕", atma: true, stats: { add: 0.06 } },
   { name: "장엄한 연화세계 정령왕의 만다라 - OO의 니르바나(유니크, 100강배)", slot: "top", layer: "normal", set: "연화세계 정령왕", atma: true, stats: { adapt: 0.02, add: 0.05, hp100: 0.1 } },
@@ -136,8 +130,6 @@ export const ACCESSORIES = [
   { name: "맹호기담 : 매듭 줄 안경", slot: "face_mid", layer: "avatar", set: "맹호기담 무악", stats: { patk: 30, matk: 30, maxi: 0.01, polar: 0.02 } },
   { name: "크레스트 드레인 : 이계의 파편", slot: "face_mid", layer: "avatar", set: "크레스트 드레인 무악", stats: { patk: 30, matk: 30, add: 0.02 } },
   { name: "화랑연가 : 비련의 조협", slot: "face_mid", layer: "avatar", set: "화랑연가 무악", stats: { patk: 30, matk: 30, hp100: 0.02 } },
-  { name: "동맹의 증표", slot: "face_mid", layer: "normal", set: "없음", stats: { patk_pct: 0.02, matk_pct: 0.02, aspd: -0.05, adapt: 0.02 } },
-  { name: "쿠샤르타의 가면(=몽마의 날개귀)", slot: "face_mid", layer: "normal", set: "없음", stats: { adapt: 0.02 } },
   { name: "바람의 기운이 담긴 머리 장식", slot: "face_mid", layer: "normal", set: "마스터로드 세트", stats: { pdef_ign: 0.005, mdef_ign: 0.005 } },
   { name: "찬란한 연화세계 정령왕의 제삼안 - OO의 아트마", slot: "face_mid", layer: "normal", set: "연화세계 정령왕", atma: true, stats: {} },
   { name: "플로스 마지카 : 플로스 페어리", slot: "face_low", layer: "avatar", set: "플로스 마지카 무악", stats: { patk: 30, matk: 30, crit: 0.03, crit_dmg: 0.01 } },
@@ -150,7 +142,6 @@ export const ACCESSORIES = [
   { name: "아게이트의 파편", slot: "face_low", layer: "normal", set: "없음", stats: { pdef_ign: 0.05, mdef_ign: 0.05, adapt: 0.02 } },
   { name: "정예 글리터의 안면갑", slot: "face_low", layer: "normal", set: "없음", stats: { adapt: 0.03, final: 0.06 } },
   { name: "바리온의 털장식", slot: "face_low", layer: "normal", set: "없음", stats: { adapt: 0.02, final: 0.05 } },
-  { name: "태양의 기운이 담긴 표식", slot: "face_low", layer: "normal", set: "마스터로드 세트", stats: { boss: 0.01 } },
   { name: "찬란한 연화세계 정령왕의 영락 - OO의 아트마", slot: "face_low", layer: "normal", set: "연화세계 정령왕", atma: true, stats: {} },
   { name: "어둠의 군상 : 현혹의 인장", slot: "arm", layer: "avatar", set: "어둠의 군상 무악", stats: { patk: 35, matk: 35, maxi: 0.02 } },
   { name: "원더 메르헨 : 금단의 장식", slot: "arm", layer: "avatar", set: "원더 메르헨 무악", stats: { patk: 30, matk: 30, maxi: 0.03 } },
@@ -213,12 +204,6 @@ export const ACCESSORIES = [
 export const NEW_ACCESSORIES = [
   { name: "엘피어스의 킨더", slot: "support", layer: "avatar", set: "없음", unknown: true, stats: {} },
   { name: "투명 액세서리 (무기)", slot: "weapon", layer: "avatar", set: "없음", stats: {} },   // 원래 능력치가 없는 꾸밈용
-  { name: "오리하르콘 그라비티 컨트롤", slot: "weapon", layer: "normal", set: "없음", unknown: true, stats: {} },
-  { name: "침식된 엘리아노드 웨폰 가드", slot: "weapon", layer: "normal", set: "없음", unknown: true, stats: {} },
-  { name: "답이 보이는 안경", slot: "face_mid", layer: "normal", set: "없음", unknown: true, stats: {} },
-  { name: "마기에 물든 공간 관리자의 문양", slot: "face_low", layer: "normal", set: "없음", unknown: true, stats: {} },
-  { name: "침식된 엘리아노드 귀걸이", slot: "ear", layer: "normal", set: "없음", unknown: true, stats: {} },
-  { name: "아이스 퀸", slot: "arm", layer: "normal", set: "없음", unknown: true, stats: {} },
 ];
 
 /**
@@ -293,7 +278,6 @@ export const OUTFITS = [
   { name: "공존의 축제 엘리아노드 의상", stats: { patk: 20, matk: 20, maxi: 0.03, all_skill: 0.02 } },
   { name: "스포티 메이드", stats: { patk: 30, matk: 30, crit: 0.03, all_skill: 0.02 } },
   { name: "베스마풍 공존의 축제 의상", stats: { patk: 25, matk: 25, maxi: 0.03, aspd: 0.03, add: 0.02 } },
-  { name: "모험가 성장 부스팅 투명 아바타", stats: { patk: 30, matk: 30, crit: 0.05, maxi: 0.05, aspd: 0.05, all_skill: 0.04 } },
   { name: "천하일미 덤플링 서번트 의상", stats: { patk: 25, matk: 25, crit: 0.03, polar: 0.03 } },
   { name: "동방미식 덤플링 서번트 의상", stats: { patk: 25, matk: 25, maxi: 0.03, adapt: 0.03 } },
 ];

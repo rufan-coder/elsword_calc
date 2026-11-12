@@ -183,7 +183,7 @@ function bestAvatarChoice(gear, score) {
 /**
  * 지금 장착(before)과 바꾼 장착(after) 비교.
  * ctx: { win, job, resist, setup } (화면의 스탯창 값과 버프 세팅)
- * 반환: { gain, before, after, delta: 보이는 효과 변화, blank: 스탯창이 비어 반영 못 한 효과 }
+ * 반환: { gain, before, after, delta: 보이는 효과 변화, blank: 스탯창이 비어 반영 못 한 효과, win: 바꾼 뒤 스탯창 }
  */
 export function compareGear(ctx, beforeGear, afterGear) {
   const { win, job, resist, setup } = ctx, atkType = job ? job.type : "물리";
@@ -204,5 +204,6 @@ export function compareGear(ctx, beforeGear, afterGear) {
     hidden: { cd: [before.cdMults, after.fx.cdMults], final: [before.finals, after.fx.finals] },
     ignored: minus(after.fx.ignored, before.ignored),
     blank: after.shifted.blank,
+    win: after.shifted.win,   // 바꾼 뒤 스탯창
   };
 }

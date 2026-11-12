@@ -60,6 +60,7 @@ const rows = [];
 for (const r of labels.reports) {
   const img = readPng(join(folder, r.file)), slot = r.slot === "ring2" ? "ring" : r.slot;
   r.names.forEach((display, i) => {
+    if (display == null) return;   // 데이터에서 뺀 아이템의 줄
     const [id, element] = resolveName(r.group, slot, display);
     const box = { x: r.first[0], y: r.first[1] + labels.pitch * i, w: labels.icon, h: labels.icon };
     const f = encodeFeature(iconFeature(img.data, img.width, box, { keepBackground: KEEP_BACKGROUND.has(r.group) }));

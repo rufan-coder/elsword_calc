@@ -40,8 +40,10 @@ function choices(group, slot) {
   if (group === "weapon") return WEAPONS.map(w => [w.name, w.set ? `${w.name} (${w.set})` : w.name]);
   let list;
   if (group === "avatar" || group === "normal") {
-    const s = slot === "ring2" ? "ring" : slot;
-    list = ALL_ACC.filter(a => a.layer === group && a.slot === s).map(a => [a.name, shortName(a.name) + (a.unknown ? " (수치 모름)" : "")]);
+    const s = slot === "ring2" ? "ring" : slot, items = ALL_ACC.filter(a => a.layer === group && a.slot === s);
+    const opt = a => [a.name, shortName(a.name) + (a.unknown ? " (수치 모름)" : "")];
+    // 아트마 악세는 등급 순서(레전드리부터 아래로) 그대로 맨 위에 둔다
+    return items.filter(a => a.atma).map(opt).concat(items.filter(a => !a.atma).reverse().map(opt));
   }
   else if (slot === "outfit") list = OUTFITS.map(o => [o.name, o.name]);
   else if (slot === "wavatar") list = WEAPON_AVATARS.map(w => [w.name, w.name]);
@@ -115,6 +117,14 @@ function syncGrades() {
   }
 }
 
+/** 결과에 보여 줄 스탯창 칸 (스펙 계산의 입력칸 순서) */
+const WINDOW_STATS = [
+  ["crit", "크리티컬"], ["crit_dmg", "크리티컬 데미지"], ["maxi", "극대화"], ["atk_pct", "공격력 % (스텟)"], ["boss", "보스 데미지"],
+  ["all_skill", "모든 스킬 데미지"], ["cho", "초월한 스킬 데미지"], ["gang", "강렬한 스킬 데미지"], ["polar", "양극화"], ["add", "추가 지속 피해"],
+  ["hp_over", "HP 50% 초과 적 데미지"], ["hp_under", "HP 50% 이하 적 데미지"], ["hp100", "HP 100% 이하 적 데미지"],
+  ["adapt", "적응력"], ["super_adapt", "초적응력"], ["cdr_gang", "강렬한 스킬 재사용 시간 감소"], ["cdr_cho", "초월한 스킬 재사용 시간 감소"],
+];
+
 // ----- 무악 세트를 4개 이상 맞췄을 때 "지금" 켜 둔 세트 -----
 let nowAvatarSets = null;
 
@@ -165,13 +175,20 @@ export function renderGear({ win, job, resist, setup }) {
       `<p class="hint">무악 세트 효과는 ${AVATAR_SET_LIMIT}개까지만 켜져요. 게임에서 켜 둔 세트를 골라 주세요. 바꾼 뒤는 가장 좋은 조합으로 계산해요.</p>`;
   }
 
-  // 바뀌는 수치
-  const rows = Object.entries(r.delta).map(([k, v]) => [STAT_NAMES[k] || k, pctText(v)]);
-  const prod = xs => xs.reduce((a, x) => a * (1 + x), 1);
-  const cd = prod(r.hidden.cd[1]) / prod(r.hidden.cd[0]) - 1, fin = prod(r.hidden.final[1]) / prod(r.hidden.final[0]) - 1;
-  if (Math.abs(cd) > 1e-9) rows.push(["크뎀 곱연산 (스탯창에 안 보임)", pctText(cd)]);
-  if (Math.abs(fin) > 1e-9) rows.push(["최종 데미지 (스탯창에 안 보임)", pctText(fin)]);
-  if (rows.length) html += `<div class="sub">바뀌는 수치</div><table class="gear-out"><tbody>${rows.map(([k, v]) => `<tr><td>${esc(k)}</td><td class="num">${v}</td></tr>`).join("")}</tbody></table>`;
+  // 스탯창 전체: 지금 -> 바꾼 뒤 (바뀐 줄은 굵게)
+  const after = r.win, stat = x => (x * 100).toFixed(2) + "%";
+  const lines = WINDOW_STATS.filter(([k]) => typeof win[k] === "number").map(([k, name]) => {
+    const d = after[k] - win[k], diff = Math.abs(d) > 5e-5;
+    return `<tr class="${diff ? "diff" : ""}"><td>${name}</td><td class="num">${stat(win[k])}</td><td class="num">${stat(after[k])}</td><td class="num">${diff ? pctText(d).replace("%", "%p") : ""}</td></tr>`;
+  });
+  const prod = xs => xs.reduce((a, x) => a * (1 + x), 1), mult = x => "x" + x.toFixed(4).replace(/0+$/, "").replace(/\.$/, "");
+  const hidden = [["크뎀 곱연산", prod(r.hidden.cd[0]), prod(r.hidden.cd[1])], ["최종 데미지", prod(r.hidden.final[0]), prod(r.hidden.final[1])]];
+  for (const [name, b, a] of hidden) {
+    const diff = Math.abs(a / b - 1) > 1e-9;
+    lines.push(`<tr class="hidden-stat ${diff ? "diff" : ""}"><td>${name} <span class="muted">(스탯창에 안 보임)</span></td><td class="num">${mult(b)}</td><td class="num">${mult(a)}</td><td class="num">${diff ? pctText(a / b - 1) : ""}</td></tr>`);
+  }
+  html += `<div class="sub">스탯창 (지금 → 바꾼 뒤)</div><div class="tbl-wrap"><table class="gear-out stats"><thead><tr><th>스탯</th><th class="num">지금</th><th class="num">바꾼 뒤</th><th class="num">변화</th></tr></thead><tbody>${lines.join("")}</tbody></table></div>` +
+    `<p class="hint">크리티컬·극대화는 점감이 다시 걸린 값이에요. 곱연 크뎀과 최종 데미지는 장비에서 나오는 배율만 따로 보여 줘요.</p>`;
 
   // 알림
   const notes = [];
@@ -188,14 +205,17 @@ export function renderGear({ win, job, resist, setup }) {
 // ----- 저장 -----
 function allSelects() { return [...document.querySelectorAll("#gear-tables select")]; }
 
+const DEFAULT_WEAPON = "사룡무";
+
 function saveGear() {
-  const s = { v: 1, sel: Object.fromEntries(allSelects().map(e => [e.id, e.value])), avatarSets: nowAvatarSets };
+  const s = { v: 2, sel: Object.fromEntries(allSelects().map(e => [e.id, e.value])), avatarSets: nowAvatarSets };
   try { localStorage.setItem(KEY, JSON.stringify(s)); } catch (e) { /* 저장이 막힌 환경 */ }
 }
 function loadGear() {
   try {
     const s = JSON.parse(localStorage.getItem(KEY) || "null");
     if (!s) return;
+    if (s.v === 1 && s.sel && s.sel["gear-now-weapon-weapon"] === "") delete s.sel["gear-now-weapon-weapon"];   // 무기 기본값(사룡무)이 없던 때
     for (const e of allSelects()) if (s.sel && e.id in s.sel && [...e.options].some(o => o.value === s.sel[e.id])) e.value = s.sel[e.id];
     nowAvatarSets = Array.isArray(s.avatarSets) ? s.avatarSets : null;
   } catch (e) { /* 못 읽으면 처음 상태로 */ }
@@ -303,6 +323,7 @@ async function fillFromShot(file, onChange) {
 // ----- 시작 -----
 export function initGear(onChange) {
   buildTables();
+  $("gear-now-weapon-weapon").value = DEFAULT_WEAPON;
   loadGear();
   const tables = $("gear-tables");
   tables.addEventListener("change", e => {
@@ -326,7 +347,7 @@ export function initGear(onChange) {
     saveGear(); onChange();
   });
   $("gear-clear").addEventListener("click", () => {
-    for (const e of allSelects()) if (e.id.startsWith("gear-now-")) { e.value = e.id.includes("-grade-") ? "유니크" : e.id.endsWith("-element") ? "유수" : ""; e.classList.remove("filled", "check"); }
+    for (const e of allSelects()) if (e.id.startsWith("gear-now-")) { e.value = e.id.includes("-grade-") ? "유니크" : e.id.endsWith("-element") ? "유수" : e.id.endsWith("-weapon") ? DEFAULT_WEAPON : ""; e.classList.remove("filled", "check"); }
     nowAvatarSets = null; lastShot = {};
     saveGear(); onChange();
   });

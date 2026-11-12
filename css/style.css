@@ -168,6 +168,9 @@ table.gear tr.atma td { padding-bottom: 8px; }
 table.gear-out td { padding: 6px 8px 6px 0; font-size: 13px; }
 table.gear-out tr.diff td { font-weight: 600; }
 table.gear-out tr.diff td:first-child { color: var(--accent); }
+table.gear-out.stats td.num { padding-left: 6px; }
+table.gear-out.stats tr.hidden-stat td { color: var(--muted); }
+table.gear-out.stats tr.hidden-stat.diff td { color: var(--fg); }
 .muted { color: var(--muted); font-weight: 400; }
 .checks { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-bottom: 6px; font-size: 13px; }
 .checks label { display: inline-flex; gap: 5px; align-items: center; cursor: pointer; }
