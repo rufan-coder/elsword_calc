@@ -11,6 +11,7 @@ import { renderCkb } from "./ui/ckb-view.js";
 import { initSocket, renderSocket, syncSocketControls } from "./ui/socket-view.js";
 import { initScreenshot, clearFilled } from "./ui/screenshot-view.js";
 import { resolve } from "./calc/stats.js";
+import { BUILD } from "./build.js";
 
 const TABS = ["compare", "ckb", "socket"];
 let tab = "compare";
@@ -45,25 +46,37 @@ function render() {
 }
 
 // ----- 시작 -----
-initInputs();
-loadState(DEFAULTS);
-defaultSnapshot = JSON.stringify(snapshot());
-const saved = readSaved();
-if (saved) loadState(saved);
-syncSocketControls();
+function start() {
+  initInputs();
+  loadState(DEFAULTS);
+  defaultSnapshot = JSON.stringify(snapshot());
+  const saved = readSaved();
+  if (saved) loadState(saved);
+  syncSocketControls();
 
-const wrap = document.querySelector(".wrap");
-wrap.addEventListener("input", render);
-wrap.addEventListener("change", render);
-initCompare(render);
-initSocket();
-initScreenshot(render);
-$("reset").addEventListener("click", () => { loadState(DEFAULTS); syncSocketControls(); clearFilled(); render(); });
-document.querySelector(".tabs").addEventListener("click", e => {
-  const b = e.target.closest('[role="tab"]');
-  if (b) { setTab(b.id.slice(4)); render(); }
-});
-window.addEventListener("resize", fitSticky);
+  const wrap = document.querySelector(".wrap");
+  wrap.addEventListener("input", render);
+  wrap.addEventListener("change", render);
+  initCompare(render);
+  initSocket();
+  initScreenshot(render);
+  $("reset").addEventListener("click", () => { loadState(DEFAULTS); syncSocketControls(); clearFilled(); render(); });
+  document.querySelector(".tabs").addEventListener("click", e => {
+    const b = e.target.closest('[role="tab"]');
+    if (b) { setTab(b.id.slice(4)); render(); }
+  });
+  window.addEventListener("resize", fitSticky);
 
-setTab(readTab());
-render();
+  setTab(readTab());
+  render();
+}
+
+// 화면(index.html)과 스크립트의 배포 버전이 다르면 예전 파일이 섞여 열린 것이다.
+// 파일을 새로 받아 다시 열고(index.html 의 __refreshFiles), 이미 한 번 해 봤다면 그냥 시작한다.
+const pageBuild = document.querySelector('meta[name="build"]')?.content;
+const mixed = !!pageBuild && pageBuild !== BUILD;
+if (!(mixed && window.__refreshFiles && window.__refreshFiles())) {
+  start();
+  window.__appReady = true;   // 여기까지 왔으면 정상으로 열린 것. 이후의 오류로는 다시 열지 않는다
+  if (!mixed) { try { sessionStorage.removeItem("elsword-calc-refreshed"); } catch (e) { /* 저장이 막힌 환경 */ } }
+}
