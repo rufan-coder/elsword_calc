@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@500;600;700&family=Noto+Sans+KR:wght@400;500;700&display=swap">
 <link rel="stylesheet" href="css/style.css">
-<meta name="build" content="2026-11-12.4">
+<meta name="build" content="2026-11-12.7">
 <script>
 // 배포 직후에는 브라우저에 새 파일과 예전 파일이 섞여 남을 수 있다 (js/build.js 참고).
 // 그 상태로 열려서 시작 중에 오류가 나면, 이 페이지가 쓰는 파일을 전부 새로 받아 딱 한 번만 다시 연다.
@@ -34,8 +34,13 @@
   <div class="lightbox" id="lightbox" hidden><img alt="" id="lightbox-img"></div>
   <header class="top">
     <h1>엘소드 스펙 계산기</h1>
+    <nav class="menu" aria-label="메뉴">
+      <a href="#spec" data-page="spec">스펙 계산</a>
+      <a href="#gear" data-page="gear">악세 세팅</a>
+    </nav>
   </header>
 
+  <main class="page" id="page-spec">
   <div class="cols">
     <div class="col">
       <div class="note" id="example-note">
@@ -194,6 +199,49 @@
       </div>
     </div>
   </div>
+  </main>
+
+  <main class="page" id="page-gear" hidden>
+  <div class="cols">
+    <div class="col">
+      <section class="panel">
+        <h2>지금 세팅 불러오기 <small>캐릭터 창 스크린샷</small></h2>
+        <div class="shot" id="gear-shot-zone">
+          <div class="top">
+            <b>스크린샷으로 채우기</b>
+            <label class="filebtn"><input type="file" id="gear-shot-file" accept="image/*">스크린샷 고르기</label>
+          </div>
+          <ul>
+            <li>게임의 <b>캐릭터 창</b>이 보이게 찍어서 끌어다 놓거나 붙여넣기(Ctrl+V) 하세요. 전체 화면으로 찍어도 돼요.</li>
+            <li>악세 23칸, 한 벌·레어 아바타, 무기 아바타를 아이콘으로 알아봐요. 지금은 <b>라비</b> 아이콘으로 만든 기준표라 다른 캐릭터는 덜 정확할 수 있어요.</li>
+            <li><b>아트마 악세의 등급과 속성</b>은 아이콘으로 구분이 안 돼요. 채운 뒤 직접 확인하세요.</li>
+            <li>잘못 읽은 칸을 고치면, 이 브라우저가 그 아이콘을 기억해 다음부터 맞춰요.</li>
+          </ul>
+          <p class="hint">이미지는 브라우저 안에서만 처리돼요.</p>
+          <ul id="gear-shot-status" aria-live="polite" hidden></ul>
+        </div>
+        <p class="hint">스탯창 값과 버프는 <a href="#spec">스펙 계산</a>에 넣은 값을 그대로 써요.</p>
+      </section>
+
+      <section class="panel">
+        <h2>장비 <small>지금 낀 것과 바꿔 볼 것</small></h2>
+        <div class="gear-tools">
+          <button type="button" id="gear-reset-next">바꿔 보기 모두 되돌리기</button>
+          <button type="button" class="ghost" id="gear-clear">지금 세팅 비우기</button>
+        </div>
+        <div id="gear-tables"></div>
+      </section>
+    </div>
+
+    <div class="col results" id="gear-results">
+      <section class="panel">
+        <h2>교체 결과 <small>세트 효과 포함</small></h2>
+        <div id="gear-out"></div>
+      </section>
+    </div>
+  </div>
+  <div class="gear-float" id="gear-float" hidden></div>
+  </main>
 
 </div>
 

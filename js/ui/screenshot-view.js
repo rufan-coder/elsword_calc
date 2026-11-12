@@ -99,6 +99,7 @@ export function initScreenshot(onFilled) {
 
   $("shot-file").addEventListener("change", e => fill(e.target.files[0]));
   document.addEventListener("paste", e => {
+    if (document.body.dataset.page === "gear") return;   // 악세 세팅 화면의 붙여넣기는 그쪽에서 받는다
     const f = firstImage(e.clipboardData && e.clipboardData.files);
     if (f) { e.preventDefault(); fill(f); }
   });

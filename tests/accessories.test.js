@@ -46,3 +46,10 @@ test("아트마: 다섯 부위에 아트마 악세가 있고, 초목은 곱연 �
   assert.equal(ATMA.sets["초목의 아트마"].cd_mult.유니크, 0.30);
   assert.equal(ATMA.sets["초목의 아트마"].fixed.crit, -0.06);
 });
+
+test("아트마: 세트 효과는 유니크까지이고, 속성마다 유니크~일반 값이 다 있다", () => {
+  assert.equal(ATMA.maxGrade, "유니크");
+  const graded = ATMA.grades.slice(ATMA.grades.indexOf(ATMA.maxGrade));
+  for (const [name, set] of Object.entries(ATMA.sets))
+    for (const [k, v] of Object.entries(set)) if (k !== "fixed") assert.deepEqual(Object.keys(v), graded, name);
+});

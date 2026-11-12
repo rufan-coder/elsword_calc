@@ -16,6 +16,7 @@
 //     patk, matk (고정 공격력), aspd (동작 속도), extra_dmg (추가 데미지), pdef_ign, mdef_ign (방어 무시),
 //     tough (강인한 스킬 데미지), active (액티브 스킬 데미지)
 // 시트의 "시줌 잠재 추가효과" 칸은 옮기지 않았다.
+// 이름은 시트를 따르되, 게임 표기와 다른 셋은 게임 표기로 고쳤다 (선장의 트리코른, 바리온의 털장식, 어둠의 기운이 담긴 헤일로).
 
 /** 악세 부위. 부위마다 아바타 악세(무악) 한 칸과 일반 악세 한 칸이 따로 있다. 반지는 일반 악세만 두 칸 */
 export const ACC_SLOTS = [
@@ -36,7 +37,8 @@ export const AVATAR_SET_LIMIT = 3;
  * 악세사리.
  *   slot  : ACC_SLOTS 의 key,  layer : "avatar"(아바타 악세) | "normal"(일반 악세)
  *   set   : 세트 이름 (SETS 의 key). 세트가 없으면 "없음"
- *   atma  : 연화세계 정령왕 아트마 악세 (ATMA 참고). 이름의 OO 는 고른 속성
+ *   atma  : 연화세계 정령왕 아트마 악세 (ATMA 참고). 이름의 OO 는 고른 속성.
+ *           게임 이름은 등급에 따라 앞말이 다르다 (장엄한 = 레전드리, 찬란한 = 유니크, 정제된 = 엘리트). 시트에는 대표 이름 하나만 있다
  */
 export const ACCESSORIES = [
   { name: "엘리아노드 웨폰가드", slot: "weapon", layer: "normal", set: "없음", stats: {} },
@@ -70,12 +72,12 @@ export const ACCESSORIES = [
   { name: "엘리오스 수호 기사단 헤어핀", slot: "face_top", layer: "avatar", set: "엘리오스 수호 기사단", stats: { patk: 25, matk: 25, crit: 0.03, aspd: 0.01 } },
   { name: "에레보스 엘레지 : 사자의 관", slot: "face_top", layer: "avatar", set: "에레보스 엘레지 무악", stats: { patk: 30, matk: 30, maxi: 0.02, polar: 0.01 } },
   { name: "아리에스 에이트라 : 솜니움 캐처", slot: "face_top", layer: "avatar", set: "아리에스 에이트라 무악", stats: { patk: 30, matk: 30, all_skill: 0.01, add: 0.01 } },
-  { name: "팬텀 베일 : 선장의 트리코튼", slot: "face_top", layer: "avatar", set: "팬텀 베일 무악", stats: { patk: 30, matk: 30, add: 0.02 } },
+  { name: "팬텀 베일 : 선장의 트리코른", slot: "face_top", layer: "avatar", set: "팬텀 베일 무악", stats: { patk: 30, matk: 30, add: 0.02 } },
   { name: "마목의 면류관", slot: "face_top", layer: "normal", set: "없음", stats: { patk_pct: -0.05, matk_pct: -0.05, final: 0.1 } },
   { name: "침식된 가시뿔", slot: "face_top", layer: "normal", set: "없음", stats: { aspd: 0.03, adapt: 0.03, final: 0.1536 } },
   { name: "마에스트로 헤일로", slot: "face_top", layer: "normal", set: "없음", stats: { adapt: 0.02, cd_mult: 0.02, final: 0.1025 } },
   { name: "혼의 왕관", slot: "face_top", layer: "normal", set: "없음", stats: { adapt: 0.02, final: 0.05 } },
-  { name: "엘(어둠)의 기운이 담긴 헤일로", slot: "face_top", layer: "normal", set: "마스터로드 세트", stats: { crit_dmg: 0.005, all_skill: 0.005 } },
+  { name: "어둠의 기운이 담긴 헤일로", slot: "face_top", layer: "normal", set: "마스터로드 세트", stats: { crit_dmg: 0.005, all_skill: 0.005 } },
   { name: "타마칸의 인장", slot: "face_top", layer: "normal", set: "없음", stats: { adapt: 0.01 } },
   { name: "창해유주 : 지식의 가호", slot: "top", layer: "avatar", set: "창해유주 무악", stats: { patk: 40, matk: 40, crit: 0.04 } },
   { name: "원더 메르헨 : 심연의 거울", slot: "top", layer: "avatar", set: "원더 메르헨 무악", stats: { patk: 30, matk: 30, cdr_all: 0.05 } },
@@ -97,15 +99,15 @@ export const ACCESSORIES = [
   { name: "팬텀 베일 : 길잡이의 외투", slot: "top", layer: "avatar", set: "팬텀 베일 무악", stats: { patk: 30, matk: 30, adapt: 0.02 } },
   { name: "드라바키의 날개", slot: "top", layer: "normal", set: "없음", stats: {} },
   { name: "강배 스위칭", slot: "top", layer: "normal", set: "없음", stats: { hp_over: 0.1, hp_under: 0.1 } },
-  { name: "장엄한 연화세계 정령왕의 만다라 - OO의 니르바나(레전드리, 100강배)", slot: "top", layer: "normal", set: "연화세계 정령왕", stats: { adapt: 0.03, add: 0.06, hp100: 0.1 } },
+  { name: "장엄한 연화세계 정령왕의 만다라 - OO의 니르바나(레전드리, 100강배)", slot: "top", layer: "normal", set: "연화세계 정령왕", atma: true, stats: { adapt: 0.03, add: 0.06, hp100: 0.1 } },
   { name: "장엄한 연화세계 정령왕의 만다라 - OO의 아트마(레전드리, 강배x)", slot: "top", layer: "normal", set: "연화세계 정령왕", atma: true, stats: { add: 0.06 } },
-  { name: "장엄한 연화세계 정령왕의 만다라 - OO의 니르바나(유니크, 100강배)", slot: "top", layer: "normal", set: "연화세계 정령왕", stats: { adapt: 0.02, add: 0.05, hp100: 0.1 } },
+  { name: "장엄한 연화세계 정령왕의 만다라 - OO의 니르바나(유니크, 100강배)", slot: "top", layer: "normal", set: "연화세계 정령왕", atma: true, stats: { adapt: 0.02, add: 0.05, hp100: 0.1 } },
   { name: "장엄한 연화세계 정령왕의 만다라 - OO의 아트마(유니크, 강배x)", slot: "top", layer: "normal", set: "연화세계 정령왕", atma: true, stats: { add: 0.05 } },
-  { name: "장엄한 연화세계 정령왕의 만다라 - OO의 니르바나(엘리트, 100강배)", slot: "top", layer: "normal", set: "연화세계 정령왕", stats: { adapt: 0.02, add: 0.04, hp100: 0.1 } },
+  { name: "장엄한 연화세계 정령왕의 만다라 - OO의 니르바나(엘리트, 100강배)", slot: "top", layer: "normal", set: "연화세계 정령왕", atma: true, stats: { adapt: 0.02, add: 0.04, hp100: 0.1 } },
   { name: "장엄한 연화세계 정령왕의 만다라 - OO의 아트마(엘리트, 강배x)", slot: "top", layer: "normal", set: "연화세계 정령왕", atma: true, stats: { add: 0.04 } },
-  { name: "장엄한 연화세계 정령왕의 만다라 - OO의 니르바나(레어, 100강배)", slot: "top", layer: "normal", set: "연화세계 정령왕", stats: { adapt: 0.02, add: 0.03, hp100: 0.1 } },
+  { name: "장엄한 연화세계 정령왕의 만다라 - OO의 니르바나(레어, 100강배)", slot: "top", layer: "normal", set: "연화세계 정령왕", atma: true, stats: { adapt: 0.02, add: 0.03, hp100: 0.1 } },
   { name: "장엄한 연화세계 정령왕의 만다라 - OO의 아트마(레어, 강배x)", slot: "top", layer: "normal", set: "연화세계 정령왕", atma: true, stats: { add: 0.03 } },
-  { name: "장엄한 연화세계 정령왕의 만다라 - OO의 니르바나(일반, 100강배)", slot: "top", layer: "normal", set: "연화세계 정령왕", stats: { adapt: 0.02, add: 0.02, hp100: 0.1 } },
+  { name: "장엄한 연화세계 정령왕의 만다라 - OO의 니르바나(일반, 100강배)", slot: "top", layer: "normal", set: "연화세계 정령왕", atma: true, stats: { adapt: 0.02, add: 0.02, hp100: 0.1 } },
   { name: "장엄한 연화세계 정령왕의 만다라 - OO의 아트마(일반, 강배x)", slot: "top", layer: "normal", set: "연화세계 정령왕", atma: true, stats: { add: 0.02 } },
   { name: "창해유주 : 진리의 편린", slot: "bottom", layer: "avatar", set: "창해유주 무악", stats: { patk: 40, matk: 40, maxi: 0.04 } },
   { name: "세크리드 나이츠 : 신성한 가호", slot: "bottom", layer: "avatar", set: "세크리드 나이츠 무악", stats: { patk: 50, matk: 50, crit: 0.04 } },
@@ -147,7 +149,7 @@ export const ACCESSORIES = [
   { name: "베리타스 페르소나 : 교도의 신앙", slot: "face_low", layer: "avatar", set: "베리타스 페르소나 무악", stats: { patk: 30, matk: 30, polar: 0.02 } },
   { name: "아게이트의 파편", slot: "face_low", layer: "normal", set: "없음", stats: { pdef_ign: 0.05, mdef_ign: 0.05, adapt: 0.02 } },
   { name: "정예 글리터의 안면갑", slot: "face_low", layer: "normal", set: "없음", stats: { adapt: 0.03, final: 0.06 } },
-  { name: "바리욘의 털장식", slot: "face_low", layer: "normal", set: "없음", stats: { adapt: 0.02, final: 0.05 } },
+  { name: "바리온의 털장식", slot: "face_low", layer: "normal", set: "없음", stats: { adapt: 0.02, final: 0.05 } },
   { name: "태양의 기운이 담긴 표식", slot: "face_low", layer: "normal", set: "마스터로드 세트", stats: { boss: 0.01 } },
   { name: "찬란한 연화세계 정령왕의 영락 - OO의 아트마", slot: "face_low", layer: "normal", set: "연화세계 정령왕", atma: true, stats: {} },
   { name: "어둠의 군상 : 현혹의 인장", slot: "arm", layer: "avatar", set: "어둠의 군상 무악", stats: { patk: 35, matk: 35, maxi: 0.02 } },
@@ -203,6 +205,25 @@ export const ACCESSORIES = [
   { name: "강인한 투사의 기술 반지", slot: "ring", layer: "normal", set: "없음", stats: { patk_pct: 0.005, matk_pct: 0.005, crit: 0.01, extra_dmg: 0.01, tough: 0.2 } },
   { name: "유연한 투사의 기술 반지", slot: "ring", layer: "normal", set: "없음", stats: { patk_pct: 0.005, matk_pct: 0.005, crit: 0.01, extra_dmg: 0.01, active: 0.2 } },
 ];
+
+/**
+ * 게임에는 있지만 시트(2.21.4)에 없는 악세. 장비 리포트로 확인했다.
+ * 능력치를 몰라 계산에서는 아무 효과도 없는 것으로 본다 (unknown: true). 수치를 알게 되면 ACCESSORIES 로 옮긴다.
+ */
+export const NEW_ACCESSORIES = [
+  { name: "칠계의 권능 : 권위의 축원", slot: "face_low", layer: "avatar", set: "없음", unknown: true, stats: {} },
+  { name: "엘피어스의 킨더", slot: "support", layer: "avatar", set: "없음", unknown: true, stats: {} },
+  { name: "투명 액세서리 (무기)", slot: "weapon", layer: "avatar", set: "없음", stats: {} },   // 원래 능력치가 없는 꾸밈용
+  { name: "오리하르콘 그라비티 컨트롤", slot: "weapon", layer: "normal", set: "없음", unknown: true, stats: {} },
+  { name: "침식된 엘리아노드 웨폰 가드", slot: "weapon", layer: "normal", set: "없음", unknown: true, stats: {} },
+  { name: "답이 보이는 안경", slot: "face_mid", layer: "normal", set: "없음", unknown: true, stats: {} },
+  { name: "마기에 물든 공간 관리자의 문양", slot: "face_low", layer: "normal", set: "없음", unknown: true, stats: {} },
+  { name: "침식된 엘리아노드 귀걸이", slot: "ear", layer: "normal", set: "없음", unknown: true, stats: {} },
+  { name: "아이스 퀸", slot: "arm", layer: "normal", set: "없음", unknown: true, stats: {} },
+];
+
+/** 시트에 없는 레어 아바타 세트 (수치를 모른다) */
+export const NEW_ARMOR_SETS = ["칠계의 권능"];
 
 /** 무기 아바타. 같은 이름의 무악 세트 개수에 들어간다 */
 export const WEAPON_AVATARS = [
@@ -334,19 +355,23 @@ export const SETS = {
  * 연화세계 정령왕 아트마 악세 세트.
  *   pieces : 아트마 악세가 들어가는 부위 (일반 악세). 이 중 need 개 이상 껴야 세트 효과가 켜진다
  *   등급   : 위 등급부터 세어서 need 개가 처음 채워지는 등급이 세트 등급이다 (예: 유니크 3 + 엘리트 2 -> 엘리트)
- *   sets   : 속성별 효과. 등급별 값은 시트 <교체 정보>의 악세 등급표. 레전드리 값은 시트에 없다
- * 바람의 아트마는 등급표에는 최종 데미지 0.5%(유니크)인데 시트의 세트 효과 표에는 1%로 들어가 있어 확인이 필요하다.
+ *            세트 효과는 유니크가 최고라, 레전드리 악세는 유니크로 센다 (maxGrade). 레전드리는 상의(만다라)에만 있다
+ *   sets   : 속성별 효과. 등급별 값은 시트 <교체 정보>의 악세 등급표
+ * 바람의 아트마는 실제로 거의 쓰지 않아서 넣지 않았다.
  */
 export const ATMA = {
   pieces: ["face_mid", "face_low", "arm", "neck", "top"],
+  elements: ["유수", "초목", "화염", "어둠", "대지", "바람"],
+  /** 게임 이름 앞말 -> 등급 */
+  gradeWords: { 장엄한: "레전드리", 찬란한: "유니크", 정제된: "엘리트" },
   need: 4,
   grades: ["레전드리", "유니크", "엘리트", "레어", "일반"],
+  maxGrade: "유니크",
   sets: {
     "화염의 아트마": { final: { 유니크: 0.20, 엘리트: 0.16, 레어: 0.13, 일반: 0.10 } },
     "어둠의 아트마": { final: { 유니크: 0.25, 엘리트: 0.21, 레어: 0.18, 일반: 0.15 } },
     "대지의 아트마": { final: { 유니크: 0.20, 엘리트: 0.16, 레어: 0.13, 일반: 0.10 } },
     "초목의 아트마": { cd_mult: { 유니크: 0.30, 엘리트: 0.26, 레어: 0.23, 일반: 0.20 }, fixed: { crit: -0.06 } },
     "유수의 아트마": { final: { 유니크: 0.20, 엘리트: 0.16, 레어: 0.13, 일반: 0.10 } },
-    "바람의 아트마": { final: { 유니크: 0.005, 엘리트: 0.004, 레어: 0.003, 일반: 0.002 }, fixed: { all_skill: 0.15 } },
   },
 };

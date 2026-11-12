@@ -16,7 +16,16 @@
 html, body { margin: 0; }
 body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 14px; line-height: 1.55; }
 .wrap { max-width: 1120px; margin: 0 auto; padding-block: 24px 48px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
-header.top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; margin-bottom: 18px; }
+header.top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 14px; margin-bottom: 18px; }
+/* 위 메뉴 */
+.menu { display: flex; gap: 4px; padding: 4px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+.menu a { padding: 6px 14px; border-radius: 7px; color: var(--muted); text-decoration: none; font-family: var(--font-display); font-weight: 600; font-size: 13.5px; white-space: nowrap; }
+.menu a:hover { color: var(--fg); }
+.menu a[aria-current] { background: var(--accent-soft); color: var(--accent); }
+.menu a:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+@media (max-width: 480px) { .menu { width: 100%; } .menu a { flex: 1 1 0; text-align: center; } }
+.page[hidden] { display: none; }
+a { color: var(--accent); }
 h1 { font-family: var(--font-display); font-size: 24px; font-weight: 700; margin: 0; text-wrap: balance; }
 .ver { color: var(--muted); font-size: 12.5px; }
 .cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); gap: 20px; align-items: start; }
@@ -69,8 +78,8 @@ details[open] > summary { margin-bottom: 12px; }
 .filebtn { cursor: pointer; border: 1px solid var(--line); background: var(--panel); border-radius: 7px; padding: 6px 11px; position: relative; }
 .filebtn:hover { border-color: var(--accent); } .filebtn:focus-within { outline: 2px solid var(--accent); outline-offset: 1px; }
 .filebtn input { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
-input.filled { border-color: var(--best); box-shadow: inset 0 0 0 1px var(--best); }
-input.check { border-color: var(--warn); box-shadow: inset 0 0 0 1px var(--warn); }
+input.filled, select.filled { border-color: var(--best); box-shadow: inset 0 0 0 1px var(--best); }
+input.check, select.check { border-color: var(--warn); box-shadow: inset 0 0 0 1px var(--warn); }
 .tag { font-size: 11px; color: var(--accent); background: var(--accent-soft); border-radius: 4px; padding: 0 5px; margin-left: 4px; white-space: nowrap; }
 .tag.chk { color: var(--warn); background: transparent; border: 1px solid var(--warn); }
 .shot ul { margin: 0; padding-left: 18px; font-size: 12.5px; color: var(--muted); } .shot ul li + li { margin-top: 2px; }
@@ -117,3 +126,49 @@ tr.best .bar { background: var(--bar-best); }
 .assume { margin: 12px 0 0; padding-left: 18px; color: var(--muted); font-size: 12.5px; }
 .assume li + li { margin-top: 2px; }
 footer { color: var(--muted); font-size: 12px; margin-top: 22px; }
+
+/* 악세 세팅 */
+.gear-tools { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 4px; }
+table.gear { table-layout: fixed; }
+table.gear th:first-child, table.gear td.lbl { width: 84px; }
+table.gear td { padding: 4px 6px 4px 0; border-top: 0; }
+table.gear td:last-child, table.gear th:last-child { padding-right: 0; }
+table.gear td.lbl { font-size: 13px; white-space: nowrap; }
+table.gear select { padding: 5px 7px; font-size: 13px; }
+table.gear tr.atma td { padding-bottom: 8px; }
+.pick { display: flex; gap: 4px; min-width: 0; }
+.pick select:first-child { flex: 1 1 auto; min-width: 0; }
+.pick select.grade { flex: 0 0 74px; }
+.pick select[hidden] { display: none; }
+@media (min-width: 861px) { #page-gear .cols { grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); } }
+/* 좁은 화면: "바꿔 보기"를 "지금" 아래 줄로 내린다 */
+@media (max-width: 600px) {
+  table.gear thead { display: none; }
+  table.gear tr { display: grid; grid-template-columns: 64px minmax(0, 1fr); column-gap: 6px; padding: 6px 0; border-top: 1px solid var(--line); }
+  table.gear td { padding: 0; }
+  table.gear td.lbl { width: auto; white-space: normal; font-size: 12px; grid-row: span 2; align-self: center; }
+  table.gear td.next { grid-column: 2; margin-top: 4px; }
+  table.gear td.next .pick::before { content: "→"; color: var(--muted); align-self: center; padding: 0 2px; }
+}
+/* 좁은 화면에서 결과가 표 아래로 밀려나므로, 아래에 DPS 변화를 띄워 둔다 */
+.gear-float { display: none; }
+@media (max-width: 860px) {
+  .gear-float:not([hidden]) { display: flex; position: fixed; left: 12px; right: 12px; bottom: max(12px, env(safe-area-inset-bottom, 0px)); z-index: 20;
+    align-items: center; gap: 10px; padding: 10px 14px; border-radius: 10px; background: var(--panel); border: 1px solid var(--line); box-shadow: 0 6px 20px rgba(0, 0, 0, .18); }
+  .gear-float span { font-size: 12.5px; color: var(--muted); }
+  .gear-float b { font-family: var(--font-display); font-size: 18px; font-variant-numeric: tabular-nums; }
+  .gear-float b.up { color: var(--best); } .gear-float b.down { color: var(--warn); }
+  .gear-float a { margin-left: auto; font-size: 12.5px; }
+  #page-gear { padding-bottom: 64px; }
+}
+.gear-gain { display: flex; flex-direction: column; gap: 2px; padding: 12px 14px; border-radius: 8px; background: var(--panel-2); margin-bottom: 12px; }
+.gear-gain .v { font-family: var(--font-display); font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.gear-gain .k { font-size: 12px; color: var(--muted); }
+.gear-gain.up .v { color: var(--best); } .gear-gain.down .v { color: var(--warn); }
+table.gear-out td { padding: 6px 8px 6px 0; font-size: 13px; }
+table.gear-out tr.diff td { font-weight: 600; }
+table.gear-out tr.diff td:first-child { color: var(--accent); }
+.muted { color: var(--muted); font-weight: 400; }
+.checks { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-bottom: 6px; font-size: 13px; }
+.checks label { display: inline-flex; gap: 5px; align-items: center; cursor: pointer; }
+ul.notes { margin: 14px 0 0; padding-left: 18px; color: var(--muted); font-size: 12.5px; } ul.notes li + li { margin-top: 3px; }

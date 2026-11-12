@@ -10,11 +10,13 @@ import { initCompare, renderCompare } from "./ui/compare-view.js";
 import { renderCkb } from "./ui/ckb-view.js";
 import { initSocket, renderSocket, syncSocketControls } from "./ui/socket-view.js";
 import { initScreenshot, clearFilled } from "./ui/screenshot-view.js";
+import { initGear, renderGear } from "./ui/gear-view.js";
 import { resolve } from "./calc/stats.js";
 import { BUILD } from "./build.js";
 
 const TABS = ["compare", "ckb", "socket"];
-let tab = "compare";
+const PAGES = ["spec", "gear"];   // 위 메뉴: 스펙 계산, 악세 세팅
+let tab = "compare", page = "spec";
 let defaultSnapshot = "";
 
 function setTab(name) {
@@ -23,21 +25,33 @@ function setTab(name) {
   saveTab(tab);
 }
 
+/** 위 메뉴로 화면을 바꾼다 (주소 끝의 #spec, #gear) */
+function setPage(name) {
+  page = PAGES.includes(name) ? name : "spec";
+  document.body.dataset.page = page;
+  for (const p of PAGES) $("page-" + p).hidden = p !== page;
+  for (const a of document.querySelectorAll(".menu a")) a.toggleAttribute("aria-current", a.dataset.page === page);
+}
+
 /** 결과 쪽이 화면 높이에 다 들어올 때만 스크롤을 따라오게 한다 */
 function fitSticky() {
-  const col = document.querySelector(".col.results");
-  col.classList.remove("stick");
-  col.classList.toggle("stick", col.offsetHeight <= window.innerHeight - 24);
+  for (const col of document.querySelectorAll(".page:not([hidden]) .col.results")) {
+    col.classList.remove("stick");
+    col.classList.toggle("stick", col.offsetHeight <= window.innerHeight - 24);
+  }
 }
 
 function render() {
   const input = readInputs();
   const ctx = Object.assign(input, { base: resolve(input.win, input.job, input.resist, input.setup) });
 
-  renderSummary(ctx);
-  renderCompare(ctx);
-  if (tab === "ckb") renderCkb(ctx);      // 최적화는 계산이 무거워서 보고 있는 탭만 그린다
-  if (tab === "socket") renderSocket(ctx);
+  if (page === "gear") renderGear(ctx);
+  else {
+    renderSummary(ctx);
+    renderCompare(ctx);
+    if (tab === "ckb") renderCkb(ctx);      // 최적화는 계산이 무거워서 보고 있는 탭만 그린다
+    if (tab === "socket") renderSocket(ctx);
+  }
   fitSticky();
 
   const snap = snapshot();
@@ -60,6 +74,9 @@ function start() {
   initCompare(render);
   initSocket();
   initScreenshot(render);
+  initGear(render);
+  window.addEventListener("hashchange", () => { setPage(location.hash.slice(1)); render(); window.scrollTo(0, 0); });
+  setPage(location.hash.slice(1));
   $("reset").addEventListener("click", () => { loadState(DEFAULTS); syncSocketControls(); clearFilled(); render(); });
   document.querySelector(".tabs").addEventListener("click", e => {
     const b = e.target.closest('[role="tab"]');

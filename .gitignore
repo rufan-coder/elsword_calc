@@ -1,3 +1,5 @@
 node_modules/
 .DS_Store
 Thumbs.db
+# 아이콘 기준표를 만들 때 쓰는 장비 리포트 스크린샷 (저장소에 올리지 않는다)
+reports/
