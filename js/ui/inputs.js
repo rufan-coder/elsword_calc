@@ -20,7 +20,7 @@ export function initInputs() {
  *   cls, job   : 전직 이름과 패시브
  *   dungeon, resist : 던전 이름과 크리저항
  *   win        : 스탯창 값 (비율로 변환, 빈 칸은 빠짐)
- *   setup      : 버프 묶음, buffs : 화면에 보여 줄 버프 중간 수치
+ *   setup      : 버프 묶음, town : 고른 마을 버프 이름, buffs : 화면에 보여 줄 버프 중간 수치
  *   shareBlank : 초월 점유율을 비워 뒀는지
  */
 export function readInputs() {
@@ -43,5 +43,5 @@ export function readInputs() {
     stoneCdr: pctOrZero("enc_cdr"), stoneDur: pctOrZero("enc_dur"),
   });
   setup.debuff = DUNGEONS[dungeon].debuff;   // 적응력 계산에 쓴다
-  return { cls, job: CLASS[cls], dungeon, resist: DUNGEONS[dungeon].critResist, win, setup, buffs: detail, shareBlank: $("share_cho").value === "" };
+  return { cls, job: CLASS[cls], dungeon, resist: DUNGEONS[dungeon].critResist, win, setup, town: $("town").value, buffs: detail, shareBlank: $("share_cho").value === "" };
 }

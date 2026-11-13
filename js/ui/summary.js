@@ -26,7 +26,7 @@ export function renderSummary({ cls, job, resist, win, base, setup, buffs }) {
 
   // 버프 세팅이 실제로 어떤 수치로 들어갔는지
   const { town, pants, shoes, yellow, enc } = buffs;
-  const townParts = [["크리", town.crit], ["극대", town.maxi], ["적응력", town.adapt], ["보뎀", town.boss]].filter(t => t[1]).map(t => `${t[0]} +${trimPct(t[1])}`);
+  const townParts = [["크리", town.crit], ["극대", town.maxi], ["적응력", town.adapt], ["보뎀", town.boss], ["최종뎀", town.final]].filter(t => t[1]).map(t => `${t[0]} +${trimPct(t[1])}`);
   $("setup-info").textContent = `적용 값 · 마을 버프 ${townParts.join(" ") || "없음"} · 하의 크확 ×${trimPct(pants)} · 신발 극대 ×${trimPct(shoes)}` + (yellow ? " · 황색 크극 ×8%" : "") +
     ` · 격려 가동률 ${(enc.uptime * 100).toFixed(1)}% (쿨 ${Math.round(enc.cool)}초, 지속 ${Math.round(enc.dur)}초)`;
 

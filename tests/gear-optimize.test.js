@@ -1,7 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { optimizeGear, LOCKABLE } from "../js/calc/gear-optimize.js";
-import { gearScorer, emptyGear } from "../js/calc/gear.js";
+import { gearScorer, emptyGear, compareGear } from "../js/calc/gear.js";
+import { buildSetup } from "../js/calc/buffs.js";
+import { resolve } from "../js/calc/stats.js";
 import { capOver } from "../js/calc/caps.js";
 import { ACCESSORIES, WEAPON_AVATARS } from "../js/data/accessories.js";
 import { near, PICARO } from "./helpers.js";
@@ -95,6 +97,33 @@ test("자동 찾기: 목표를 맞출 수 없으면 가장 가깝게 맞추고 �
   const r = optimizeGear(ctx, NOW, { locked, cdrTarget: 0.40 });
   assert.equal(r.cdrMet, false);
   near(r.cdr, 0.37, 10);
+});
+
+test("마을 버프: 바꿔 보기에서 버프를 바꾸면 그 버프로 계산한다", () => {
+  const { setup } = buildSetup({ town: "온천 버프", pantsEnhance: 11, shoesEnhance: 11, yellow: true, stoneCdr: 0.3, stoneDur: 0 });
+  const after = Object.assign(emptyGear(), { town: "수색대원의 결의" });   // 온천(크리·극대 5%) -> 수색대원(적응력 2%, 보뎀 2%)
+  // 보뎀만 있으면 보뎀 2%만큼
+  const c = { win: { boss: 1.9 }, job: PICARO.job, resist: 0.3, setup, town: "온천 버프" };
+  const boss = resolve(c.win, c.job, c.resist, setup).boss;
+  near(compareGear(c, emptyGear(), after).gain, (1 + boss + 0.02) / (1 + boss) - 1, 12);
+  near(compareGear(c, emptyGear(), Object.assign(emptyGear(), { town: "온천 버프" })).gain, 0, 12);   // 지금과 같은 버프
+  // 적응력: 57% + 2% = 59% (상한 60% 안)
+  const c2 = { win: { adapt: 0.57, super_adapt: 0.1 }, job: PICARO.job, resist: 0.3, setup: { ...setup, debuff: 0.95 }, town: "온천 버프" };
+  near(compareGear(c2, emptyGear(), after).gain, (1 - (0.95 - 0.69)) / (1 - (0.95 - 0.67)) - 1, 12);
+});
+
+test("마을 버프: 자동 찾기는 버프마다 따로 찾아 비교하고, 고정하면 지금 버프만 쓴다", () => {
+  const { setup } = buildSetup({ town: "엘 하우스(강화)", pantsEnhance: 11, shoesEnhance: 11, yellow: true, stoneCdr: 0.3, stoneDur: 0 });
+  const c = { ...ctx, setup: { ...setup, debuff: 0.95 }, town: "엘 하우스(강화)" };
+  const locked = LOCKABLE.filter(k => k.startsWith("normal.") || k === "element");
+  const r = optimizeGear(c, NOW, { locked });
+  assert.deepEqual(r.byTown.map(x => x.town).sort(), ["수색대원의 결의", "엘 하우스(강화)"]);   // 온천은 엘 하우스보다 나을 수 없어서 뺀다
+  assert.equal(r.gain, r.byTown[0].gain);
+  for (let i = 1; i < r.byTown.length; i++) assert.ok(r.byTown[i - 1].gain >= r.byTown[i].gain - 1e-12);
+  near(gearScorer(c, NOW).evaluate(r.gear).value - 1, r.gain, 12);
+  const fixed = optimizeGear(c, NOW, { locked: locked.concat(["town"]) });
+  assert.equal(fixed.byTown.length, 1);
+  assert.equal(fixed.gear.town, null);
 });
 
 test("상한 초과: 적응력은 마을 버프 포함 60%, 쿨감 35%, 양극화 60%를 넘은 만큼", () => {

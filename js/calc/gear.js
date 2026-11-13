@@ -8,6 +8,7 @@
 //     armor:   { hair, top, bottom, gloves, shoes }                                                레어 아바타 세트 이름
 //     atma:    { element: "유수", grades: { face_mid, face_low, arm, neck } }                       아트마 속성과 부위별 등급
 //     avatarSets: [세트 이름...] | null   무악 세트를 4개 이상 맞췄을 때 켜 둔 세트 (null 이면 자동)
+//     town:    마을 버프 이름 | null      바꿔 볼 마을 버프 (null 이면 스펙 계산에서 고른 버프 그대로)
 //   }
 //
 // 계산 방법
@@ -18,6 +19,7 @@
 import { ACCESSORIES, NEW_ACCESSORIES, ARMOR_AVATARS, WEAPON_AVATARS, OUTFITS, WEAPONS, SETS, ATMA, AVATAR_SET_LIMIT } from "../data/accessories.js";
 import { critFromStat, statFromCrit, maxiFromStat, statFromMaxi } from "./diminish.js";
 import { resolve, dpsIndex, has } from "./stats.js";
+import { setupWithTown } from "./buffs.js";
 
 const ACC_BY_NAME = new Map([...ACCESSORIES, ...NEW_ACCESSORIES].map(a => [a.name, a]));
 const WAVATAR_BY_NAME = new Map(WEAPON_AVATARS.map(w => [w.name, w]));
@@ -36,7 +38,7 @@ export const STAT_NAMES = {
 
 export const emptyGear = () => ({
   avatar: {}, normal: {}, outfit: null, wavatar: null, weapon: null, armor: {},
-  atma: { element: "유수", grades: {} }, avatarSets: null,
+  atma: { element: "유수", grades: {} }, avatarSets: null, town: null,
 });
 
 /** 아트마 악세 등급: 만다라는 이름에, 나머지는 따로 고른 값에 있다 */
@@ -184,7 +186,7 @@ const prodOf = xs => xs.reduce((a, x) => a * (1 + x), 1);
 
 function dps(win, job, resist, setup, fx) {
   const s = resolve(win, job, resist, Object.assign({}, setup, { cd_base_mults: setup.cd_base_mults.concat(fx.cdMults) }));
-  return dpsIndex(s) * prodOf(fx.finals);
+  return dpsIndex(s) * prodOf(fx.finals) * (1 + (setup.town_final || 0));   // 마을 버프의 최종 데미지 (있는 버프만)
 }
 
 /** 무악 세트가 4개 이상이면, 켤 수 있는 조합 중 score(세트 이름 목록)가 가장 높은 것. 3개 이하면 null */
@@ -209,18 +211,20 @@ function bestAvatarChoice(gear, score) {
  * 반환: {
  *   before,
  *   evaluate(afterGear) -> { fx, shifted, value: 지금 대비 DPS 배율 }
- *   valueOf(fx)         -> 효과 묶음 { visible, cdMults, finals } 의 지금 대비 DPS 배율 (자동 찾기가 스탯별 가치를 잴 때 쓴다)
+ *   valueOf(fx, g)      -> 효과 묶음 { visible, cdMults, finals } 의 지금 대비 DPS 배율 (자동 찾기가 스탯별 가치를 잴 때 쓴다. g 는 마을 버프용)
  * }
+ * 지금 장착은 ctx.setup 의 마을 버프로, 바꾼 장착은 g.town 이 있으면 그 마을 버프로 계산한다.
  */
 export function gearScorer(ctx, beforeGear) {
   const { win, job, resist, setup } = ctx, atkType = job ? job.type : "물리";
+  const setupFor = g => g && g.town && g.town !== ctx.town ? setupWithTown(setup, g.town) : setup;
   const before = gearEffects(beforeGear, atkType, beforeGear.avatarSets);
   const baseDps = dps(win, job, resist, setup, before);
-  const valueOf = fx => dps(shiftWindow(win, minus(fx.visible, before.visible)).win, job, resist, setup, fx) / baseDps;
+  const valueOf = (fx, g) => dps(shiftWindow(win, minus(fx.visible, before.visible)).win, job, resist, setupFor(g), fx) / baseDps;
   const afterFor = (g, choice) => {
     const fx = gearEffects(g, atkType, choice);
     const shifted = shiftWindow(win, minus(fx.visible, before.visible));
-    return { fx, shifted, value: dps(shifted.win, job, resist, setup, fx) / baseDps };
+    return { fx, shifted, setup: setupFor(g), value: dps(shifted.win, job, resist, setupFor(g), fx) / baseDps };
   };
   // 바꾼 쪽은 사용자가 고르지 않았으면 가장 좋은 무악 세트 조합을 고른다
   const evaluate = g => afterFor(g, g.avatarSets || bestAvatarChoice(g, names => afterFor(g, names).value));
@@ -243,5 +247,6 @@ export function compareGear(ctx, beforeGear, afterGear) {
     ignored: minus(after.fx.ignored, before.ignored),
     blank: after.shifted.blank,
     win: after.shifted.win,   // 바꾼 뒤 스탯창
+    setup: after.setup,       // 바꾼 뒤 버프 (마을 버프를 바꿨으면 그 버프)
   };
 }

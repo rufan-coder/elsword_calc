@@ -14,7 +14,8 @@
 // 쿨감은 DPS에 넣지 않는다. 대신 "바꾼 뒤 초월한 스킬 재사용 시간 감소가 목표(cdrTarget) 아래로 내려가지 않게" 지킨다.
 //   - 목표보다 모자라면 1%p마다 아주 큰 값을 깎아서, 목표를 먼저 지키고 그 안에서 DPS가 가장 높은 것을 고르게 한다
 //     (목표를 못 맞추는 경우에는 가장 가깝게 맞춘다)
-//   - 2)의 어림에는 쿨감 가치(λ)를 0, 조금, 많이로 바꿔 가며 계획을 따로 뽑아서, 쿨감 아이템을 쓰는 계획도 후보에 들어가게 한다
+//   - 2)의 어림에서 쿨감을 무시하고 뽑은 가장 좋은 계획이 목표를 못 지키면, 쿨감 가치(λ)를 조금·많이로 바꿔 가며
+//     계획을 더 뽑아서 쿨감 아이템을 쓰는 계획도 후보에 들어가게 한다
 //
 // 가정
 //   - 고정하지 않은 칸은 게임에 있는 어떤 아이템이든 낄 수 있다고 본다
@@ -25,6 +26,7 @@
 
 import { ACCESSORIES, ACC_SLOTS, WEAPON_AVATARS, OUTFITS, ARMOR_AVATARS, SETS, ATMA, AVATAR_SET_LIMIT } from "../data/accessories.js";
 import { gearScorer, countSets, IGNORED } from "./gear.js";
+import { TOWN_BUFFS } from "../data/buffs.js";
 
 const ARMOR_PIECES = ["hair", "top", "bottom", "gloves", "shoes"];
 const ATMA_GRADED = ATMA.pieces.filter(s => s !== "top");
@@ -39,7 +41,7 @@ const CDR_LAMBDAS = [0, 0.3, 1, 5];
 /** 고정할 수 있는 칸의 이름: "avatar.weapon", "normal.ring2", "outfit", "wavatar", "armor"(5셋), "element"(아트마 속성) */
 export const LOCKABLE = [
   ...["avatar", "normal"].flatMap(layer => ACC_SLOTS.map(s => `${layer}.${s.key}`).concat(layer === "normal" ? ["normal.ring2"] : [])),
-  "outfit", "wavatar", "armor", "element",
+  "outfit", "wavatar", "armor", "element", "town",
 ];
 
 // ----- 후보 줄이기: 다른 후보보다 모든 면에서 나을 게 없는 아이템은 뺀다 -----
@@ -100,11 +102,16 @@ function variables(atkType) {
 
 const clone = g => ({
   avatar: { ...g.avatar }, normal: { ...g.normal }, outfit: g.outfit || null, wavatar: g.wavatar || null, weapon: g.weapon || null,
-  armor: { ...g.armor }, atma: { element: g.atma.element, grades: { ...g.atma.grades } }, avatarSets: null,
+  armor: { ...g.armor }, atma: { element: g.atma.element, grades: { ...g.atma.grades } }, avatarSets: null, town: g.town || null,
 });
 const validRings = g => !g.normal.ring || g.normal.ring !== g.normal.ring2;
 const setOf = name => { const a = ACCESSORIES.find(x => x.name === name) || WEAPON_AVATARS.find(x => x.name === name); return a && !a.atma && a.set !== "없음" ? a.set : null; };
 const SET_OF = new Map([...ACCESSORIES, ...WEAPON_AVATARS].map(a => [a.name, setOf(a.name)]).filter(x => x[1]));
+
+/** 따져 볼 마을 버프: 다른 버프보다 모든 수치가 같거나 낮은 버프는 뺀다 */
+const TOWN_KEYS = ["crit", "maxi", "adapt", "boss", "final"];
+const townBeats = (a, b) => TOWN_KEYS.every(k => (a[k] || 0) >= (b[k] || 0)) && TOWN_KEYS.some(k => (a[k] || 0) > (b[k] || 0));
+export const TOWN_CHOICES = Object.keys(TOWN_BUFFS).filter(n => !Object.keys(TOWN_BUFFS).some(m => townBeats(TOWN_BUFFS[m], TOWN_BUFFS[n])));
 
 /** 같은 시드면 같은 수열 (mulberry32) */
 function rng(seed) {
@@ -150,29 +157,49 @@ function bestPlans(slots, groups, limit, keep) {
     return subsetCache.get(key);
   };
 
-  /** 고른 세트들(+끼울 개수)에 대해 칸이 겹치지 않게 이득이 가장 큰 배치 */
+  /**
+   * 고른 세트들(+끼울 개수)에 대해 칸이 겹치지 않게 이득이 가장 큰 배치. 반환: { gain, sel: 세트마다 고른 칸 묶음 } 또는 null
+   * 수만 번 부르므로 배열을 새로 만들지 않게 짰다.
+   */
+  const cur = [];
   function assign(chosen) {
-    const lists = chosen.map(([gi, opt]) => subsets(gi, opt.need));
-    if (lists.some(l => !l.length)) return null;
-    const tops = lists.map(l => l[0].gain), rest = tops.map((_, i) => tops.slice(i + 1).reduce((a, x) => a + x, 0));
-    let best = null;
-    const go = (i, used, gain, picks) => {
-      if (i === lists.length) { if (!best || gain > best.gain) best = { gain, picks: picks.slice() }; return; }
+    const n = chosen.length, lists = new Array(n);
+    for (let i = 0; i < n; i++) { lists[i] = subsets(chosen[i][0], chosen[i][1].need); if (!lists[i].length) return null; }
+    // 대부분은 세트마다 가장 좋은 칸 고르기가 서로 안 겹친다. 그러면 그게 답이다
+    let used = 0, sum = 0, clash = false;
+    for (let i = 0; i < n; i++) { if (used & lists[i][0].mask) { clash = true; break; } used |= lists[i][0].mask; sum += lists[i][0].gain; }
+    if (!clash) return { gain: sum, sel: lists.map(l => l[0]) };
+    // 겹치면 가지치기 탐색: 이득 순으로 보다가, 남은 세트가 모두 최고로 나와도 지금 최고를 못 넘으면 멈춘다
+    const rest = new Array(n).fill(0);
+    for (let i = n - 2; i >= 0; i--) rest[i] = rest[i + 1] + lists[i + 1][0].gain;
+    let bestGain = -Infinity, bestSel = null;
+    const go = (i, used, gain) => {
+      if (i === n) { if (gain > bestGain) { bestGain = gain; bestSel = cur.slice(0, n); } return; }
       for (const s of lists[i]) {
-        if (best && gain + s.gain + rest[i] <= best.gain) break;   // 이득 순이라 뒤는 더 볼 필요 없다
+        if (gain + s.gain + rest[i] <= bestGain) break;
         if (used & s.mask) continue;
-        go(i + 1, used | s.mask, gain + s.gain, picks.concat(s.picks));
+        cur[i] = s; go(i + 1, used | s.mask, gain + s.gain);
       }
     };
-    go(0, 0, 0, []);
-    return best;
+    go(0, 0, 0);
+    return bestSel && { gain: bestGain, sel: bestSel };
   }
 
-  const plans = [{ value: freeSum, picks: [], tags: [] }];
+  // 좋은 계획 keep 개만 값 순으로 들고 다닌다 (모두 모아 정렬하지 않는다)
+  const top = [{ value: freeSum, sel: [], tags: [] }];
+  let total = 1;
+  const offer = (value, chosen, sel) => {
+    if (top.length >= keep && value <= top[top.length - 1].value) return;
+    let i = top.length;
+    while (i > 0 && top[i - 1].value < value) i--;
+    top.splice(i, 0, { value, sel, tags: chosen.map(([, o]) => o.tag) });
+    if (top.length > keep) top.pop();
+  };
   const walk = (start, chosen, bonus) => {
     if (chosen.length) {
+      total++;
       const a = assign(chosen);
-      if (a) plans.push({ value: freeSum + a.gain + bonus, picks: a.picks, tags: chosen.map(([, o]) => o.tag) });
+      if (a) offer(freeSum + a.gain + bonus, chosen, a.sel);
     }
     if (chosen.length === limit) return;
     for (let gi = start; gi < groups.length; gi++) {
@@ -180,30 +207,71 @@ function bestPlans(slots, groups, limit, keep) {
     }
   };
   walk(0, [], 0);
-  return { list: plans.sort((a, b) => b.value - a.value).slice(0, keep), total: plans.length };
+  return { list: top.map(p => ({ value: p.value, tags: p.tags, picks: p.sel.flatMap(x => x.picks) })), total };
 }
 
 /**
  * 자동 찾기.
- * ctx    : { win, job, resist, setup } (compareGear 와 같다)
+ * ctx    : { win, job, resist, setup, town } (compareGear 와 같다. town 은 스펙 계산에서 고른 마을 버프 이름)
  * now    : 지금 장착 상태 (gear.js 의 모양)
- * opts   : { locked: 고정할 칸 이름 목록 (LOCKABLE 참고), cdrTarget: 지킬 초월 쿨감 (0.32 = 32%, 없으면 null),
+ * opts   : { locked: 고정할 칸 이름 목록 (LOCKABLE 참고. "town" 이면 마을 버프도 지금 그대로), towns: 따져 볼 마을 버프 (기본 townsToTry),
+ *            cdrTarget: 지킬 초월 쿨감 (0.32 = 32%, 없으면 null),
  *            plans: 정확히 계산해 볼 계획 수, rounds: 마지막에 무작위로 흔들어 볼 횟수, kicks: 한 번에 흔드는 최대 개수, seed }
- * 반환   : { gear: 찾은 장착 상태, gain: 지금 대비 DPS 변화, cdr: 바꾼 뒤 초월 쿨감, cdrMet: 목표를 지켰는지,
- *            evals: 정확히 계산한 조합 수, plans: 어림해 본 세트 계획 수 }
+ * 반환   : { gear, gain, cdr, cdrMet, evals, plans, byTown }
+ *            gear: 찾은 장착 상태 (gear.town = 바꿀 마을 버프, 지금 그대로면 null), gain: 지금 대비 DPS 변화,
+ *            cdr: 바꾼 뒤 초월 쿨감, cdrMet: 목표를 지켰는지, evals: 정확히 계산한 조합 수, plans: 어림해 본 세트 계획 수,
+ *            byTown: 마을 버프마다 찾은 결과 [{ town: 버프 이름, gear, gain, cdr, cdrMet }] (좋은 순)
+ *
+ * 마을 버프는 적응력 상한과 얽혀 있어서(예: 수색대원의 결의로 적응력을 채우면 악세 칸을 딜 옵션에 쓸 수 있다) 따로 정하면 좋은 조합을 놓친다.
+ * 그래서 버프마다 따로 끝까지 찾아서 비교한다. 다른 버프보다 모든 수치가 같거나 낮은 버프(미사용, 엘 하우스보다 보뎀만 없는 온천)는
+ * 나을 수가 없어서 따지지 않는다 (지금 쓰는 버프면 "지금 그대로"로 들어간다).
  */
-export function optimizeGear(ctx, now, { locked = [], cdrTarget = null, plans: keep = 30, rounds = 4, kicks = 1, seed = 1 } = {}) {
+export function optimizeGear(ctx, now, opts = {}) {
+  const current = ctx.town && TOWN_BUFFS[ctx.town] ? ctx.town : null;
+  const towns = opts.towns || townsToTry(ctx, opts.locked);
+  let evals = 0, plans = 0;
+  const byTown = sortByTown(towns.map(town => {
+    const r = searchOne(ctx, now, Object.assign(clone(now), { town }), opts);
+    evals += r.evals; plans += r.plans;
+    return Object.assign(r, { town: town || current });
+  }));
+  const best = byTown[0];
+  return { gear: best.gear, gain: best.gain, cdr: best.cdr, cdrMet: best.cdrMet, evals, plans, byTown };
+}
+
+/** 따져 볼 마을 버프 목록 (null = 스펙 계산에서 고른 버프 그대로). 화면에서 버프 하나씩 나눠 돌릴 때 쓴다 */
+export function townsToTry(ctx, locked = []) {
+  const current = ctx.town && TOWN_BUFFS[ctx.town] ? ctx.town : null;
+  return locked.includes("town") || !current ? [null] : [null].concat(TOWN_CHOICES.filter(n => n !== current));
+}
+
+/** 마을 버프별 결과 정렬: 쿨감 목표를 지킨 것 먼저, 그다음 DPS 순 (같으면 앞에 있던 것 = 지금 버프가 앞) */
+export function sortByTown(list) {
+  return list.slice().sort((a, b) => (b.cdrMet - a.cdrMet) || (b.gain - a.gain > 1e-12 ? 1 : a.gain - b.gain > 1e-12 ? -1 : 0));
+}
+
+/** 마을 버프 하나(start.town)로 찾는다. 기준(지금 대비)은 언제나 now 와 스펙 계산의 마을 버프다 */
+function searchOne(ctx, now, start, { locked = [], cdrTarget = null, plans: keep = 30, rounds = 4, kicks = 1, seed = 1 } = {}) {
   const atkType = ctx.job ? ctx.job.type : "물리";
   const scorer = gearScorer(ctx, now);
   let evals = 0, planCount = 0;
   // 쿨감 목표: 스탯창에 초월 쿨감 값이 있어야 바꾼 뒤 값을 알 수 있다
   const useCdr = cdrTarget != null && isFinite(cdrTarget) && typeof ctx.win.cdr_cho === "number";
+  // 같은 장착 상태를 여러 번 계산하지 않게 결과를 기억해 둔다
+  const memo = new Map();
   const judge = g => {
-    const r = scorer.evaluate(g), cdr = r.shifted.win.cdr_cho;
-    const short = useCdr ? Math.max(0, cdrTarget - cdr) : 0;
-    return { dps: r.value, cdr, short: short > 1e-9 ? short : 0 };
+    const key = JSON.stringify(g);
+    let j = memo.get(key);
+    if (!j) {
+      evals++;
+      const r = scorer.evaluate(g), cdr = r.shifted.win.cdr_cho;
+      const short = useCdr ? Math.max(0, cdrTarget - cdr) : 0;
+      j = { dps: r.value, cdr, short: short > 1e-9 ? short : 0 };
+      memo.set(key, j);
+    }
+    return j;
   };
-  const value = g => { evals++; const j = judge(g); return j.dps - CDR_PENALTY * j.short; };
+  const value = g => { const j = judge(g); return j.dps - CDR_PENALTY * j.short; };
   const lock = new Set(locked);
   const all = variables(atkType), vars = all.filter(v => !lock.has(v.key));
   const byKey = new Map(all.map(v => [v.key, v]));
@@ -223,15 +291,27 @@ export function optimizeGear(ctx, now, { locked = [], cdrTarget = null, plans: k
 
   // ----- 1) 스탯별 가치: 지금 상태에서 그 스탯이 1%p 늘면 DPS가 몇 % 느는지 (점감·상한 반영) -----
   const KEYS = ["crit", "maxi", "crit_dmg", "atk_pct", "boss", "polar", "all_skill", "cho", "gang", "hp_over", "hp_under", "hp100", "add", "adapt", "cd_mult", "final"];
-  const lambdas = useCdr ? CDR_LAMBDAS : [0];
-  const keepEach = Math.ceil(keep / lambdas.length) + (useCdr ? 5 : 0);
+  const keepEach = Math.ceil(keep / CDR_LAMBDAS.length) + 5;   // 쿨감 가치를 바꿔 가며 뽑을 때 하나당 계획 수
+
+  /**
+   * 계획 후보 모으기. 먼저 쿨감을 무시하고(λ = 0) 뽑아 보고, 그중 DPS가 가장 높은 것이 쿨감 목표를 지키면
+   * 쿨감 조건이 걸리지 않는 경우라 그대로 쓴다. 목표를 못 지키면 쿨감 가치를 높여 가며 계획을 더 뽑는다.
+   */
+  function gatherPlans(makePlans) {
+    let cands = makePlans(0, keep).filter(validRings);
+    if (useCdr && cands.length) {
+      const top = cands.map(judge).reduce((a, j) => j.dps > a.dps ? j : a);
+      if (top.short > 0) for (const lam of CDR_LAMBDAS.slice(1)) cands = cands.concat(makePlans(lam, keepEach));
+    }
+    return cands;
+  }
   function weights(g) {
-    const fx = scorer.evaluate(g).fx, v0 = scorer.valueOf(fx), d = 0.01, w = {};
+    const fx = scorer.evaluate(g).fx, v0 = scorer.valueOf(fx, g), d = 0.01, w = {};
     for (const k of KEYS) {
       const fx1 = k === "cd_mult" ? { visible: fx.visible, cdMults: fx.cdMults.concat([d]), finals: fx.finals }
         : k === "final" ? { visible: fx.visible, cdMults: fx.cdMults, finals: fx.finals.concat([d]) }
         : { visible: { ...fx.visible, [k]: (fx.visible[k] || 0) + d }, cdMults: fx.cdMults, finals: fx.finals };
-      w[k] = (scorer.valueOf(fx1) / v0 - 1) / d;
+      w[k] = (scorer.valueOf(fx1, g) / v0 - 1) / d;
     }
     return w;
   }
@@ -276,12 +356,12 @@ export function optimizeGear(ctx, now, { locked = [], cdrTarget = null, plans: k
   function avatarStep(g, cur) {
     const layerVars = vars.filter(v => v.group === "avatar");
     if (!layerVars.length) return { g, v: cur };
-    const base = weights(g), cands = [];
-    for (const lam of lambdas) cands.push(...avatarPlans(g, { ...base, cdr_all: lam }, layerVars));
+    const base = weights(g);
+    const cands = gatherPlans((lam, n) => avatarPlans(g, { ...base, cdr_all: lam }, layerVars, n));
     // 다듬을 때 한 벌·5셋도 같이 다시 고른다 (크리·극대 균형이 아바타 악세와 맞물려 있어서)
     return bestRealized(g, cur, cands, layerVars.concat(vars.filter(v => v.group === "wear")));
   }
-  function avatarPlans(g, w, layerVars) {
+  function avatarPlans(g, w, layerVars, n) {
     const slots = freeBest(layerVars, w, g);
     const groups = [];
     for (const [name, s] of Object.entries(SETS)) {
@@ -296,7 +376,7 @@ export function optimizeGear(ctx, now, { locked = [], cdrTarget = null, plans: k
         .filter(o => o.need >= 1 && o.need <= pieces.length);
       if (options.length) groups.push({ id: name, pieces, options });
     }
-    const { list, total } = bestPlans(slots, groups, AVATAR_SET_LIMIT, keepEach);
+    const { list, total } = bestPlans(slots, groups, AVATAR_SET_LIMIT, n);
     planCount += total;
     return list.map(p => realize(g, slots, p));
   }
@@ -305,11 +385,11 @@ export function optimizeGear(ctx, now, { locked = [], cdrTarget = null, plans: k
   function normalStep(g, cur) {
     const layerVars = vars.filter(v => v.group === "normal");
     if (!layerVars.length) return { g, v: cur };
-    const base = weights(g), cands = [];
-    for (const lam of lambdas) cands.push(...normalPlans(g, { ...base, cdr_all: lam }, layerVars));
+    const base = weights(g);
+    const cands = gatherPlans((lam, n) => normalPlans(g, { ...base, cdr_all: lam }, layerVars, n));
     return bestRealized(g, cur, cands, layerVars);
   }
-  function normalPlans(g, w, layerVars) {
+  function normalPlans(g, w, layerVars, n) {
     const slots = freeBest(layerVars, w, g);
     const groups = [];
     for (const [name, s] of Object.entries(SETS)) {
@@ -343,7 +423,7 @@ export function optimizeGear(ctx, now, { locked = [], cdrTarget = null, plans: k
       }
     }
     if (atmaOptions.length) groups.push({ id: "atma", pieces: atmaPieces, options: atmaOptions });
-    const { list, total } = bestPlans(slots, groups, groups.length, keepEach);
+    const { list, total } = bestPlans(slots, groups, groups.length, n);
     planCount += total;
     const setElement = (n, plan) => { const t = plan.tags.find(x => x.startsWith("atma:")); if (t && elementVar) n.atma.element = t.slice(5); };
     return list.map(p => realize(g, slots, p, setElement));
@@ -474,7 +554,7 @@ export function optimizeGear(ctx, now, { locked = [], cdrTarget = null, plans: k
   }
 
   // ----- 순서대로 -----
-  let g = clone(now);
+  let g = clone(start);
   for (const slot of ATMA_GRADED) if (!lock.has(`normal.${slot}`)) g.atma.grades[slot] = BEST_ATMA_GRADE;
   if (!validRings(g) && byKey.get("normal.ring2") && !lock.has("normal.ring2")) g.normal.ring2 = null;
   let cur = value(g);

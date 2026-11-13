@@ -5,6 +5,7 @@ import { readOptionRows, setOptionRows } from "./compare-view.js";
 import { CLASS } from "../data/classes.js";
 import { DUNGEONS } from "../data/dungeons.js";
 import { STONES, SLOT_BASE } from "../data/stones.js";
+import { TOWN_BUFFS } from "../data/buffs.js";
 
 /** 스탯창 값 입력칸 (id) */
 export const STAT_IDS = ["crit", "crit_dmg", "maxi", "A", "A_max", "W", "boss", "all_skill", "cho", "gang", "share_cho", "polar", "add", "hp_over", "hp_under", "hp100",
@@ -63,6 +64,7 @@ export function readSaved() {
     if (!("sk_cnt_boss2" in saved)) saved.sk_cnt_boss2 = "";            // 보뎀을 힘트마·사냥석으로 나누기 전
     if (!("sk_cnt_crit" in saved)) for (const s of STONES) saved["sk_cnt_" + s.key] = "";   // 칸 수 대신 수치 합을 받던 때
     if (!("adapt" in saved)) for (const id of ["adapt", "super_adapt", "cdr_gang", "cdr_cho"]) saved[id] = "";   // 적응력·쿨감 칸이 없던 때 (예시 값이 섞이지 않게 비움)
+    if (saved.town != null && !TOWN_BUFFS[saved.town]) saved.town = DEFAULTS.town;   // 목록에서 빠진 버프 (공존의 축제 등)
     return Object.assign({}, DEFAULTS, saved);
   } catch (e) { return null; }
 }

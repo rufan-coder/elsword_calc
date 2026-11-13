@@ -5,7 +5,8 @@ import { $, esc, signed, trimPct } from "./dom.js";
 import { ACC_SLOTS, ACCESSORIES, NEW_ACCESSORIES, ARMOR_AVATARS, WEAPON_AVATARS, OUTFITS, WEAPONS, ATMA, AVATAR_SET_LIMIT } from "../data/accessories.js";
 import { ICONS } from "../data/icons.js";
 import { compareGear, emptyGear, STAT_NAMES, IGNORED } from "../calc/gear.js";
-import { optimizeGear } from "../calc/gear-optimize.js";
+import { optimizeGear, townsToTry, sortByTown } from "../calc/gear-optimize.js";
+import { TOWN_BUFFS } from "../data/buffs.js";
 import { capOver, CAP_NOTES } from "../calc/caps.js";
 import { findCharWindow, equipCells } from "../ocr/equip-window.js";
 import { matchCell, isEmptySlot, decodeFeature, encodeFeature, featureDistance, KEEP_BACKGROUND, MAX_DISTANCE } from "../ocr/icons.js";
@@ -16,15 +17,21 @@ const SAME = "=";   // "바꿔 보기"에서 그대로
 
 // ----- 화면에 그릴 줄 -----
 const slotName = s => (s.key === "weapon" ? "무기 악세" : s.name);   // 무기 아바타·무기 종류와 헷갈리지 않게
-// 줄 하나: [묶음, 부위, 이름]. 묶음 wear 는 한 벌·5셋(레어 아바타 다섯 부위)·무기 아바타
+// 줄 하나: [묶음, 부위, 이름]. 묶음 wear 는 한 벌·5셋(레어 아바타 다섯 부위)·무기 아바타, town 은 마을 버프
 const TABLES = [
-  { title: "무기", rows: [["weapon", "weapon", "무기 종류"]] },
+  { title: "무기 · 마을 버프", rows: [["weapon", "weapon", "무기 종류"], ["town", "town", "마을 버프"]] },
   { title: "아바타 악세", rows: [["wear", "outfit", "한 벌"], ["wear", "set5", "5셋"], ["wear", "wavatar", "무기 아바타"], ...ACC_SLOTS.map(s => ["avatar", s.key, slotName(s)])] },
   { title: "일반 악세", atma: true, rows: ACC_SLOTS.filter(s => s.key !== "ring").map(s => ["normal", s.key, slotName(s)]).concat([["normal", "ring", "반지 1"], ["normal", "ring2", "반지 2"]]) },
 ];
 const ROWS = TABLES.flatMap(t => t.rows);
 /** 줄의 "고정" 이름 (자동 찾기의 LOCKABLE 과 같은 이름). 무기 종류는 늘 그대로라 없다 */
-const lockKey = (group, slot) => group === "weapon" ? null : group === "wear" ? (slot === "set5" ? "armor" : slot) : `${group}.${slot}`;
+const lockKey = (group, slot) => group === "weapon" ? null : group === "town" ? "town" : group === "wear" ? (slot === "set5" ? "armor" : slot) : `${group}.${slot}`;
+/**
+ * 처음 쓸 때 "고정"에 체크해 두는 칸. 일반 악세는 레이드 세트·아트마로 거의 정해져 있어서 하의만 바꿔 본다
+ * (아바타 악세로 DPS를 올리다 적응력이 모자라면 족쇄 -> 글로잉 플라워, 넘치면 그 반대로 바꾸는 경우가 대부분이라)
+ */
+const DEFAULT_LOCKS = ["element", "normal.weapon", "normal.support", "normal.face_top", "normal.face_mid", "normal.face_low", "normal.top", "normal.arm", "normal.ear", "normal.neck", "normal.ring", "normal.ring2"];
+const LOCK_VERSION = 2;   // 기본 고정이 바뀌면 올린다 (저장된 일반 악세 고정을 한 번 기본값으로 맞춘다)
 const LOCK_TITLE = "자동 찾기에서 지금 것을 그대로 둬요";
 const lockCell = (key, name) => `<td class="lock">${key ? `<input type="checkbox" id="gear-lock-${key}" data-lock="${key}" aria-label="${esc(name)} 고정" title="${LOCK_TITLE}">` : ""}</td>`;
 const ARMOR_PIECES = ["hair", "top", "bottom", "gloves", "shoes"];
@@ -44,6 +51,7 @@ function shortName(name) {
  */
 function choices(group, slot) {
   if (group === "weapon") return WEAPONS.map(w => [w.name, w.set ? `${w.name} (${w.set})` : w.name]);
+  if (group === "town") return Object.keys(TOWN_BUFFS).map(n => [n, n]);
   let list;
   if (group === "avatar" || group === "normal") {
     const s = slot === "ring2" ? "ring" : slot, items = ALL_ACC.filter(a => a.layer === group && a.slot === s);
@@ -73,13 +81,20 @@ function buildTables() {
     for (const [group, slot, name] of table.rows) {
       const list = choices(group, slot), grade = group === "normal" && ATMA_GRADED.includes(slot);
       const gradeSel = side => grade ? `<select class="grade" id="gear-${side}-grade-${slot}" aria-label="${name} 아트마 등급" hidden>${options(SET_GRADES.map(g => [g, g]), side === "next" ? [[SAME, "그대로"]] : [])}</select>` : "";
+      if (group === "town") {   // 지금 = 스펙 계산에서 고른 버프 (여기서는 못 바꾼다)
+        html += `<tr><td class="lbl">${name}</td>` +
+          `<td><div class="pick"><select id="gear-now-town-town" aria-label="지금 마을 버프" title="스펙 계산에서 바꿔요" disabled>${options(list, [])}</select></div></td>` +
+          `<td class="next"><div class="pick"><select id="gear-next-town-town" aria-label="바꿔 볼 마을 버프">${options(list, [[SAME, "그대로"]])}</select></div></td>${lockCell("town", name)}</tr>`;
+        continue;
+      }
       const none = group === "weapon" ? "그 밖의 무기" : "미착용";
       html += `<tr><td class="lbl">${name}</td>` +
         `<td><div class="pick"><select id="gear-now-${group}-${slot}" aria-label="지금 ${table.title} ${name}">${options(list, [["", none]])}</select>${gradeSel("now")}</div></td>` +
         `<td class="next"><div class="pick"><select id="gear-next-${group}-${slot}" aria-label="바꿔 볼 ${table.title} ${name}">${options(list, [[SAME, "그대로"], ["", none]])}</select>${gradeSel("next")}</div></td>${lockCell(lockKey(group, slot), `${table.title} ${name}`)}</tr>`;
     }
     html += `</tbody></table></div>`;
-    if (table.title === "무기") html += `<p class="hint">레이드 무기는 같은 레이드 악세 세트 개수에 들어가요 (사룡무 → 공중요새의 유산, 암귀무 → 심연 레이드 세트). 스크린샷으로는 채우지 않으니 직접 골라 주세요. 자동 찾기에서도 무기 종류는 그대로 둬요.</p>`;
+    if (table.title === "무기 · 마을 버프") html += `<p class="hint">레이드 무기는 같은 레이드 악세 세트 개수에 들어가요 (사룡무 → 공중요새의 유산, 암귀무 → 심연 레이드 세트). 스크린샷으로는 채우지 않으니 직접 골라 주세요. 자동 찾기에서도 무기 종류는 그대로 둬요.</p>` +
+      `<p class="hint">마을 버프 "지금"은 스펙 계산에서 고른 버프예요. 바꿔 보기에서 다른 버프를 고르면 그 버프로 계산해요 (적응력은 60% 상한에 같이 들어가요). 자동 찾기는 "고정"이 아니면 버프마다 따로 찾아서 비교해요.</p>`;
     if (table.title === "아바타 악세") html += `<p class="hint">5셋은 레어 아바타 헤어·상의·하의·장갑·신발을 한 세트로 맞춰 입은 것이에요.</p>`;
   }
   $("gear-tables").innerHTML = html;
@@ -95,6 +110,11 @@ function readGear(side) {
     return side === "next" && v === SAME ? sel("now", group, slot).value : v;
   };
   for (const [group, slot] of ROWS) {
+    if (group === "town") {   // 지금 버프와 같으면 null (= 스펙 계산의 버프 그대로)
+      const v = side === "next" ? sel("next", "town", "town").value : SAME;
+      g.town = v === SAME || v === $("town").value ? null : v;
+      continue;
+    }
     const v = val(group, slot) || null;
     if (group === "weapon") g.weapon = v;
     else if (group === "wear") {
@@ -132,6 +152,7 @@ function fillNext(g) {
   const wear = (x, slot) => slot === "outfit" ? x.outfit : slot === "wavatar" ? x.wavatar : x.armor.hair;
   for (const [group, slot] of ROWS) {
     if (group === "weapon") continue;
+    if (group === "town") { sel("next", "town", "town").value = g.town || SAME; continue; }
     const want = (group === "wear" ? wear(g, slot) : g[group][slot]) || null;
     const cur = (group === "wear" ? wear(now, slot) : now[group][slot]) || null;
     const e = sel("next", group, slot);
@@ -161,7 +182,8 @@ let nowAvatarSets = null;
 const pctText = v => signed(v, 2).replace(/(\.\d*?)0+%$/, "$1%").replace(/\.%$/, "%");
 const stagesText = s => `${s.count}개 (${s.stages.join("·")}세트)`;
 
-let lastCtx = null;   // 자동 찾기가 쓰는 마지막 스탯창·버프 값
+let lastCtx = null;
+let lastTownResults = null;   // 마지막 자동 찾기의 마을 버프별 결과   // 자동 찾기가 쓰는 마지막 스탯창·버프 값
 const hasWindow = win => Object.keys(win).some(k => k !== "share_cho" && k !== "share_gang");
 
 /** 상한을 넘은 양: 빨간 글씨 "1% 초과" (크리·극대화는 실전 값 기준) */
@@ -176,8 +198,9 @@ function cdrTarget(win) {
 /** 초월 쿨감이 목표보다 낮으면 빨간 글씨 "목표보다 2% 낮음" */
 const shortSpan = (cdr, target) => target != null && cdr < target - 1e-9 ? `<span class="over" title="초월 쿨감 목표 ${trimPct(target)}">목표보다 ${trimPct(target - cdr)} 낮음</span>` : "";
 
-export function renderGear({ win, job, resist, setup }) {
-  lastCtx = { win, job, resist, setup };
+export function renderGear({ win, job, resist, setup, town }) {
+  lastCtx = { win, job, resist, setup, town };
+  sel("now", "town", "town").value = town;
   syncGrades();
   const hasCdr = typeof win.cdr_cho === "number";
   $("gear-cdr-target").placeholder = hasCdr ? String(+(win.cdr_cho * 100).toFixed(2)) : "";
@@ -188,7 +211,7 @@ export function renderGear({ win, job, resist, setup }) {
     $("gear-float").hidden = true;
     return;
   }
-  const r = compareGear({ win, job, resist, setup }, readGear("now"), readGear("next"));
+  const r = compareGear(lastCtx, readGear("now"), readGear("next"));
   const changed = JSON.stringify(readGear("now")) !== JSON.stringify(Object.assign(readGear("next"), { avatarSets: nowAvatarSets }));
   const float = $("gear-float");
   float.hidden = !changed;
@@ -224,7 +247,7 @@ export function renderGear({ win, job, resist, setup }) {
 
   // 스탯창 전체: 지금 -> 바꾼 뒤 (바뀐 줄은 굵게)
   const after = r.win, stat = x => (x * 100).toFixed(2) + "%";
-  const overNow = capOver(win, setup, job, resist), overAfter = capOver(after, setup, job, resist), target = cdrTarget(win);
+  const overNow = capOver(win, setup, job, resist), overAfter = capOver(after, r.setup, job, resist), target = cdrTarget(win);
   const mark = (w, over, k) => overSpan(over, k) + (k === "cdr_cho" ? shortSpan(w[k], target) : "");
   const lines = WINDOW_STATS.filter(([k]) => typeof win[k] === "number").map(([k, name]) => {
     const d = after[k] - win[k], diff = Math.abs(d) > 5e-5;
@@ -250,6 +273,8 @@ export function renderGear({ win, job, resist, setup }) {
   if (unknown.length) notes.push(`수치를 모르는 아이템은 효과가 없는 것으로 계산했어요: ${unknown.join(", ")}`);
   if ([r.before.atma, r.after.atma].some(a => a.grade && !a.active)) notes.push("이 속성의 아트마 세트 효과는 데이터에 없어서 계산하지 않았어요.");
   if (["now", "next"].some(side => { const g = readGear(side); return g.normal.ring && g.normal.ring === g.normal.ring2; })) notes.push("같은 반지는 두 개 낄 수 없어요. 반지 1과 반지 2를 다르게 골라 주세요.");
+  const nextTown = readGear("next").town;
+  if (nextTown) notes.push(`마을 버프를 "${nextTown}"(으)로 바꿔서 계산했어요. 그 버프를 쓰기로 했다면 스펙 계산의 마을 버프도 바꿔 주세요 (그래야 다음에 비교할 때 "지금"이 맞아요).`);
   if (notes.length) html += `<ul class="notes">${notes.map(n => `<li>${esc(n)}</li>`).join("")}</ul>`;
   out.innerHTML = html;
 }
@@ -260,17 +285,29 @@ function allSelects() { return [...document.querySelectorAll("#gear-tables selec
 const DEFAULT_WEAPON = "사룡무";
 
 function saveGear() {
-  const s = { v: 2, sel: Object.fromEntries(allSelects().map(e => [e.id, e.value])), avatarSets: nowAvatarSets, locks: readLocks(), cdrTarget: $("gear-cdr-target").value };
+  const s = { v: 2, sel: Object.fromEntries(allSelects().map(e => [e.id, e.value])), avatarSets: nowAvatarSets, locks: readLocks(), lockVersion: LOCK_VERSION, cdrTarget: $("gear-cdr-target").value };
   try { localStorage.setItem(KEY, JSON.stringify(s)); } catch (e) { /* 저장이 막힌 환경 */ }
 }
+/** 기본 고정: 일반 악세 쪽은 DEFAULT_LOCKS 대로, 아바타 쪽은 keep 에 있는 것만 */
+function applyDefaultLocks(keep = []) {
+  for (const e of document.querySelectorAll("#gear-tables input[data-lock]")) {
+    const k = e.dataset.lock, normalSide = k === "element" || k.startsWith("normal.");
+    e.checked = normalSide ? DEFAULT_LOCKS.includes(k) : keep.includes(k);
+  }
+}
+
 function loadGear() {
+  applyDefaultLocks();
   try {
     const s = JSON.parse(localStorage.getItem(KEY) || "null");
     if (!s) return;
     if (s.v === 1 && s.sel && s.sel["gear-now-weapon-weapon"] === "") delete s.sel["gear-now-weapon-weapon"];   // 무기 기본값(사룡무)이 없던 때
     for (const e of allSelects()) if (s.sel && e.id in s.sel && [...e.options].some(o => o.value === s.sel[e.id])) e.value = s.sel[e.id];
     nowAvatarSets = Array.isArray(s.avatarSets) ? s.avatarSets : null;
-    if (Array.isArray(s.locks)) for (const e of document.querySelectorAll("#gear-tables input[data-lock]")) e.checked = s.locks.includes(e.dataset.lock);
+    if (Array.isArray(s.locks)) {
+      if ((s.lockVersion || 1) < LOCK_VERSION) applyDefaultLocks(s.locks);   // 기본 고정이 바뀐 뒤 처음: 일반 악세 쪽만 기본값으로
+      else for (const e of document.querySelectorAll("#gear-tables input[data-lock]")) e.checked = s.locks.includes(e.dataset.lock);
+    }
     if (typeof s.cdrTarget === "string") $("gear-cdr-target").value = s.cdrTarget;
   } catch (e) { /* 못 읽으면 처음 상태로 */ }
 }
@@ -396,31 +433,51 @@ export function initGear(onChange) {
     nowAvatarSets = on.length ? on : null;
     saveGear(); onChange();
   });
-  $("gear-optimize").addEventListener("click", () => {
+  $("gear-optimize").addEventListener("click", async () => {
     const st = $("gear-opt-status"), btn = $("gear-optimize");
     st.hidden = false;
     if (!lastCtx || !hasWindow(lastCtx.win)) { st.textContent = "먼저 스펙 계산에 스탯창 값을 넣어 주세요. 그 값으로 DPS를 계산해서 찾아요."; return; }
-    btn.disabled = true; st.textContent = "찾는 중이에요…";
-    setTimeout(() => {   // "찾는 중" 글자가 먼저 그려지게
-      try {
-        const t = performance.now();
-        const now = readGear("now");
-        const target = cdrTarget(lastCtx.win);
-        const r = optimizeGear(lastCtx, now, { locked: readLocks(), cdrTarget: target });
-        const sec = Math.max(0.1, (performance.now() - t) / 1000).toFixed(1);
-        fillNext(r.gear);
-        // 스탯창에는 지금 낀 장비 효과가 이미 들어 있어서, 지금 세팅이 비어 있으면 변화가 실제보다 크게 나온다
-        const worn = Object.values(now.avatar).concat(Object.values(now.normal)).filter(Boolean).length;
-        st.textContent = (r.gain > 1e-9
-          ? `가장 좋은 조합을 "바꿔 보기"에 채웠어요. 지금보다 DPS ${signed(r.gain)} · 세트 조합 ${r.plans.toLocaleString("ko-KR")}가지를 따져 봤어요 (${sec}초).`
-          : "지금 세팅이 이미 가장 좋아요.") +
-          (target != null ? ` 초월 쿨감 ${trimPct(lastCtx.win.cdr_cho)} → ${trimPct(r.cdr)} (목표 ${trimPct(target)}${r.cdrMet ? "" : ", 목표를 맞출 수 있는 조합이 없어서 가장 가깝게 맞췄어요"}).` : "") +
-          (worn < 12 ? " 지금 세팅 칸이 많이 비어 있어서 변화가 실제보다 크게 나올 수 있어요. 지금 낀 것을 먼저 채워 주세요." : "");
-        saveGear(); onChange();
-      } catch (e) {
-        st.textContent = "찾다가 문제가 생겼어요. 새로고침한 뒤 다시 해 주세요.";
-      } finally { btn.disabled = false; }
-    }, 30);
+    btn.disabled = true;
+    const ctx = lastCtx, now = readGear("now"), locked = readLocks(), target = cdrTarget(ctx.win);
+    const towns = townsToTry(ctx, locked), results = [];
+    const t = performance.now();
+    try {
+      // 마을 버프마다 나눠 돌리고, 사이사이 화면에 진행 상황을 그린다
+      for (let i = 0; i < towns.length; i++) {
+        st.textContent = towns.length > 1 ? `찾는 중이에요… (마을 버프 ${i + 1}/${towns.length}: ${towns[i] || ctx.town})` : "찾는 중이에요…";
+        await new Promise(r => setTimeout(r, 30));
+        const r = optimizeGear(ctx, now, { locked, cdrTarget: target, towns: [towns[i]] });
+        results.push(r.byTown[0]);
+        results[results.length - 1].plans = r.plans;
+      }
+      const byTown = sortByTown(results), best = byTown[0];
+      const sec = Math.max(0.1, (performance.now() - t) / 1000).toFixed(1);
+      const plans = results.reduce((a, x) => a + x.plans, 0);
+      fillNext(best.gear);
+      // 스탯창에는 지금 낀 장비 효과가 이미 들어 있어서, 지금 세팅이 비어 있으면 변화가 실제보다 크게 나온다
+      const worn = Object.values(now.avatar).concat(Object.values(now.normal)).filter(Boolean).length;
+      const cdrText = x => target != null ? ` 초월 쿨감 ${trimPct(ctx.win.cdr_cho)} → ${trimPct(x.cdr)} (목표 ${trimPct(target)}${x.cdrMet ? "" : ", 목표를 맞출 수 있는 조합이 없어서 가장 가깝게 맞췄어요"}).` : "";
+      const head = best.gain > 1e-9
+        ? `가장 좋은 조합을 "바꿔 보기"에 채웠어요${towns.length > 1 ? ` (마을 버프: ${best.town})` : ""}. 지금보다 DPS ${signed(best.gain)} · 세트 조합 ${plans.toLocaleString("ko-KR")}가지를 따져 봤어요 (${sec}초).`
+        : "지금 세팅이 이미 가장 좋아요.";
+      let html = `<span>${esc(head + cdrText(best) + (worn < 12 ? " 지금 세팅 칸이 많이 비어 있어서 변화가 실제보다 크게 나올 수 있어요. 지금 낀 것을 먼저 채워 주세요." : ""))}</span>`;
+      if (byTown.length > 1) {
+        html += `<div class="town-pick"><span>마을 버프별 최고 조합 (누르면 그 조합으로 바꿔요)</span>` +
+          byTown.map((x, i) => `<button type="button" data-i="${i}"${i === 0 ? ' class="on"' : ""}>${esc(x.town)}${x.town === ctx.town ? " (지금)" : ""} ${signed(x.gain)}${target != null && !x.cdrMet ? " · 쿨감 부족" : ""}</button>`).join("") + `</div>`;
+      }
+      st.innerHTML = html;
+      lastTownResults = byTown;
+      saveGear(); onChange();
+    } catch (e) {
+      st.textContent = "찾다가 문제가 생겼어요. 새로고침한 뒤 다시 해 주세요.";
+    } finally { btn.disabled = false; }
+  });
+  $("gear-opt-status").addEventListener("click", e => {
+    const b = e.target.closest("button[data-i]");
+    if (!b || !lastTownResults) return;
+    fillNext(lastTownResults[+b.dataset.i].gear);
+    for (const x of $("gear-opt-status").querySelectorAll("button[data-i]")) x.classList.toggle("on", x === b);
+    saveGear(); onChange();
   });
   $("gear-cdr-target").addEventListener("input", saveGear);
   $("gear-reset-next").addEventListener("click", () => {
