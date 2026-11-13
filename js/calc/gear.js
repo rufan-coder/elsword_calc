@@ -93,12 +93,12 @@ export function countSets(gear) {
 
 const STAGE_NUMS = Object.fromEntries(Object.entries(SETS).map(([n, s]) => [n, Object.keys(s.stages).map(Number)]));
 
-/** 켜지는 세트 단계들: [{ name, kind, count, stages: [2, 3] }] */
-function setStages(count) {
+/** 켜지는 세트 단계들: [{ name, kind, count, stages: [2, 3] }]. ignore 에 있는 세트는 없는 것으로 본다 */
+function setStages(count, ignore) {
   const out = [];
   for (const [name, n] of count) {
     const s = SETS[name];
-    if (!s) continue;
+    if (!s || (ignore && ignore.has(name))) continue;
     const stages = STAGE_NUMS[name].filter(k => k <= n);
     if (stages.length) out.push({ name, kind: s.kind, count: n, stages });
   }
@@ -123,8 +123,9 @@ export function atmaSet(gear) {
 /**
  * 장착 상태의 효과 합계.
  * avatarChoice: 무악 세트가 4개 이상일 때 켤 세트 이름 목록 (없으면 개수가 많은 순)
+ * ignore      : 세트 효과를 세지 않을 세트 이름 Set (자동 찾기가 오래된 세트를 맞추지 않게 할 때)
  */
-export function gearEffects(gear, atkType, avatarChoice) {
+export function gearEffects(gear, atkType, avatarChoice, ignore) {
   const acc = { visible: {}, ignored: {}, cdMults: [], finals: [], unknown: [] };
   const items = [];
   for (const layer of ["avatar", "normal"]) for (const name of Object.values(gear[layer])) { const a = ACC_BY_NAME.get(name); if (a) items.push(a); }
@@ -137,7 +138,7 @@ export function gearEffects(gear, atkType, avatarChoice) {
   }
 
   // 세트 효과. 무악 세트는 AVATAR_SET_LIMIT 개까지만
-  const all = setStages(countSets(gear));
+  const all = setStages(countSets(gear), ignore);
   const avatarSets = all.filter(s => s.kind === "avatar");
   let on = avatarSets;
   if (avatarSets.length > AVATAR_SET_LIMIT) {
@@ -190,8 +191,8 @@ function dps(win, job, resist, setup, fx) {
 }
 
 /** 무악 세트가 4개 이상이면, 켤 수 있는 조합 중 score(세트 이름 목록)가 가장 높은 것. 3개 이하면 null */
-function bestAvatarChoice(gear, score) {
-  const names = setStages(countSets(gear)).filter(s => s.kind === "avatar").map(s => s.name);
+function bestAvatarChoice(gear, score, ignore) {
+  const names = setStages(countSets(gear), ignore).filter(s => s.kind === "avatar").map(s => s.name);
   if (names.length <= AVATAR_SET_LIMIT) return null;
   let best = null;
   const pick = (start, chosen) => {
@@ -214,20 +215,21 @@ function bestAvatarChoice(gear, score) {
  *   valueOf(fx, g)      -> 효과 묶음 { visible, cdMults, finals } 의 지금 대비 DPS 배율 (자동 찾기가 스탯별 가치를 잴 때 쓴다. g 는 마을 버프용)
  * }
  * 지금 장착은 ctx.setup 의 마을 버프로, 바꾼 장착은 g.town 이 있으면 그 마을 버프로 계산한다.
+ * opts.ignoreSets: 세트 효과를 세지 않을 세트 (자동 찾기 전용)
  */
-export function gearScorer(ctx, beforeGear) {
+export function gearScorer(ctx, beforeGear, { ignoreSets = null } = {}) {
   const { win, job, resist, setup } = ctx, atkType = job ? job.type : "물리";
   const setupFor = g => g && g.town && g.town !== ctx.town ? setupWithTown(setup, g.town) : setup;
-  const before = gearEffects(beforeGear, atkType, beforeGear.avatarSets);
+  const before = gearEffects(beforeGear, atkType, beforeGear.avatarSets, ignoreSets);
   const baseDps = dps(win, job, resist, setup, before);
   const valueOf = (fx, g) => dps(shiftWindow(win, minus(fx.visible, before.visible)).win, job, resist, setupFor(g), fx) / baseDps;
   const afterFor = (g, choice) => {
-    const fx = gearEffects(g, atkType, choice);
+    const fx = gearEffects(g, atkType, choice, ignoreSets);
     const shifted = shiftWindow(win, minus(fx.visible, before.visible));
     return { fx, shifted, setup: setupFor(g), value: dps(shifted.win, job, resist, setupFor(g), fx) / baseDps };
   };
   // 바꾼 쪽은 사용자가 고르지 않았으면 가장 좋은 무악 세트 조합을 고른다
-  const evaluate = g => afterFor(g, g.avatarSets || bestAvatarChoice(g, names => afterFor(g, names).value));
+  const evaluate = g => afterFor(g, g.avatarSets || bestAvatarChoice(g, names => afterFor(g, names).value, ignoreSets));
   return { before, evaluate, valueOf };
 }
 

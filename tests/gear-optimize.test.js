@@ -1,11 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { optimizeGear, LOCKABLE } from "../js/calc/gear-optimize.js";
-import { gearScorer, emptyGear, compareGear } from "../js/calc/gear.js";
+import { gearScorer, gearEffects, emptyGear, compareGear } from "../js/calc/gear.js";
 import { buildSetup } from "../js/calc/buffs.js";
 import { resolve } from "../js/calc/stats.js";
 import { capOver } from "../js/calc/caps.js";
-import { ACCESSORIES, WEAPON_AVATARS } from "../js/data/accessories.js";
+import { ACCESSORIES, WEAPON_AVATARS, OPTIMIZE_SKIP_SETS } from "../js/data/accessories.js";
 import { near, PICARO } from "./helpers.js";
 
 const ctx = {
@@ -26,6 +26,14 @@ test("자동 찾기: 지금보다 나빠지지 않고, 답의 DPS 변화는 교�
   near(gearScorer(ctx, NOW).evaluate(r.gear).value - 1, r.gain, 12);
   assert.equal(r.gear.weapon, "사룡무");                         // 무기 종류는 그대로
   assert.notEqual(r.gear.normal.ring, r.gear.normal.ring2);       // 같은 반지 두 개는 안 낀다
+});
+
+test("자동 찾기: 오래된 세트는 5셋으로 고르지 않고, 무악 세트로도 맞추지 않는다", () => {
+  const r = optimizeGear(ctx, NOW);
+  assert.ok(!OPTIMIZE_SKIP_SETS.has(r.gear.armor.hair));
+  // 찾는 동안에는 오래된 세트 효과를 세지 않는다: 오래된 무악 세트가 켜져 있으면 그건 우연히 모인 것이라 그 세트를 빼도 손해가 없어야 한다
+  const active = gearEffects(r.gear, ctx.job.type).sets.filter(s => s.active && OPTIMIZE_SKIP_SETS.has(s.name));
+  assert.equal(active.length, 0);
 });
 
 test("자동 찾기: 고정한 칸은 지금 것 그대로 둔다", () => {

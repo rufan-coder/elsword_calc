@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { ACC_SLOTS, ACC_LAYERS, ACCESSORIES, WEAPON_AVATARS, ARMOR_AVATARS, OUTFITS, SETS, ATMA } from "../js/data/accessories.js";
+import { ACC_SLOTS, ACC_LAYERS, ACCESSORIES, WEAPON_AVATARS, ARMOR_AVATARS, OUTFITS, SETS, ATMA, OPTIMIZE_SKIP_SETS } from "../js/data/accessories.js";
 
 const KEYS = new Set(["crit", "maxi", "crit_dmg", "patk_pct", "matk_pct", "boss", "polar", "all_skill", "cho", "gang", "hp_over", "hp_under", "hp100",
   "add", "adapt", "cdr_all", "cd_mult", "final", "patk", "matk", "aspd", "extra_dmg", "pdef_ign", "mdef_ign", "tough", "active"]);
@@ -52,4 +52,13 @@ test("아트마: 세트 효과는 유니크까지이고, 속성마다 유니크~
   const graded = ATMA.grades.slice(ATMA.grades.indexOf(ATMA.maxGrade));
   for (const [name, set] of Object.entries(ATMA.sets))
     for (const [k, v] of Object.entries(set)) if (k !== "fixed") assert.deepEqual(Object.keys(v), graded, name);
+});
+
+test("레어 아바타: 나무위키와 다른 값은 시트(해외 자료로 확인)를 따른다, 자동 찾기에서 세트로 맞추지 않는 오래된 세트", () => {
+  assert.deepEqual(ARMOR_AVATARS["아이테르 노블리타스"].bottom, { patk: 50, matk: 50, crit: 0.04 });
+  assert.equal(SETS["아이테르 노블리타스 무악"].stages[3].add, 0.03);
+  assert.deepEqual(SETS["창해유주"].stages[4], { patk_pct: 0.04, matk_pct: 0.04, maxi: 0.03 });
+  assert.equal(OPTIMIZE_SKIP_SETS.size, 26);   // 레어 아바타 13종 + 같은 이름의 무악 13종
+  for (const n of OPTIMIZE_SKIP_SETS) assert.ok(SETS[n], n);
+  assert.ok(!OPTIMIZE_SKIP_SETS.has("심연의 존재") && OPTIMIZE_SKIP_SETS.has("엠파이어 레인 무악"));
 });

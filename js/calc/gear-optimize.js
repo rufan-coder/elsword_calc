@@ -23,9 +23,10 @@
 //   - 같은 반지 두 개는 끼지 않는다 (게임에서도 안 된다)
 //   - 수치를 모르는 아이템과 능력치도 세트도 없는 아이템은 고르지 않는다 (고정한 칸에 있으면 그대로 둔다)
 //   - 무기 종류는 바꾸지 않는다
+//   - 오래된 세트(OPTIMIZE_SKIP_SETS)는 세트로 맞추려고 하지 않는다. 아이템은 낱개로 고를 수 있고, 우연히 같은 세트가 모이면 그 효과는 계산에 들어간다
 
-import { ACCESSORIES, ACC_SLOTS, WEAPON_AVATARS, OUTFITS, ARMOR_AVATARS, SETS, ATMA, AVATAR_SET_LIMIT } from "../data/accessories.js";
-import { gearScorer, countSets, IGNORED } from "./gear.js";
+import { ACCESSORIES, ACC_SLOTS, WEAPON_AVATARS, OUTFITS, ARMOR_AVATARS, SETS, ATMA, AVATAR_SET_LIMIT, OPTIMIZE_SKIP_SETS } from "../data/accessories.js";
+import { gearScorer, gearEffects, countSets, IGNORED } from "./gear.js";
 import { TOWN_BUFFS } from "../data/buffs.js";
 
 const ARMOR_PIECES = ["hair", "top", "bottom", "gloves", "shoes"];
@@ -93,7 +94,7 @@ function variables(atkType) {
   vars.push({ key: "wavatar", group: "avatar", cands: wav, values: wav.map(w => w.name), get: g => g.wavatar || null, set: (g, v) => { g.wavatar = v; } });
   const outfits = prune(OUTFITS.map(o => ({ name: o.name, set: "없음", atma: false, c: counted(o.stats, atkType) })));
   vars.push({ key: "outfit", group: "wear", cands: outfits, values: outfits.map(o => o.name), get: g => g.outfit || null, set: (g, v) => { g.outfit = v; } });
-  vars.push({ key: "armor", group: "wear", values: Object.keys(ARMOR_AVATARS), get: g => g.armor.hair || null, set: (g, v) => { for (const p of ARMOR_PIECES) g.armor[p] = v; } });
+  vars.push({ key: "armor", group: "wear", values: Object.keys(ARMOR_AVATARS).filter(n => !OPTIMIZE_SKIP_SETS.has(n)), get: g => g.armor.hair || null, set: (g, v) => { for (const p of ARMOR_PIECES) g.armor[p] = v; } });
   vars.push({ key: "element", group: "element", values: ATMA_ELEMENTS, get: g => g.atma.element, set: (g, v) => { g.atma.element = v; } });
   return vars;
 }
@@ -253,7 +254,11 @@ export function sortByTown(list) {
 /** 마을 버프 하나(start.town)로 찾는다. 기준(지금 대비)은 언제나 now 와 스펙 계산의 마을 버프다 */
 function searchOne(ctx, now, start, { locked = [], cdrTarget = null, plans: keep = 30, rounds = 4, kicks = 1, seed = 1 } = {}) {
   const atkType = ctx.job ? ctx.job.type : "물리";
-  const scorer = gearScorer(ctx, now);
+  // 오래된 세트는 세트 효과를 세지 않고 찾는다 (새로 맞추지 않게). 지금 이미 켜져 있는 세트는 실제로 쓰는 것이라 센다
+  const nowSets = new Set(gearEffects(now, atkType, now.avatarSets).sets.map(x => x.name));
+  const ignoreSets = new Set([...OPTIMIZE_SKIP_SETS].filter(n => !nowSets.has(n)));
+  const scorer = gearScorer(ctx, now, { ignoreSets });
+  const realScorer = gearScorer(ctx, now);   // 결과로 보여 줄 실제 DPS 변화 (낱개로 고른 아이템이 우연히 세트가 되면 그 효과도 들어간다)
   let evals = 0, planCount = 0;
   // 쿨감 목표: 스탯창에 초월 쿨감 값이 있어야 바꾼 뒤 값을 알 수 있다
   const useCdr = cdrTarget != null && isFinite(cdrTarget) && typeof ctx.win.cdr_cho === "number";
@@ -297,8 +302,8 @@ function searchOne(ctx, now, start, { locked = [], cdrTarget = null, plans: keep
    * 계획 후보 모으기. 먼저 쿨감을 무시하고(λ = 0) 뽑아 보고, 그중 DPS가 가장 높은 것이 쿨감 목표를 지키면
    * 쿨감 조건이 걸리지 않는 경우라 그대로 쓴다. 목표를 못 지키면 쿨감 가치를 높여 가며 계획을 더 뽑는다.
    */
-  function gatherPlans(makePlans) {
-    let cands = makePlans(0, keep).filter(validRings);
+  function gatherPlans(makePlans, first = keep) {
+    let cands = makePlans(0, first).filter(validRings);
     if (useCdr && cands.length) {
       const top = cands.map(judge).reduce((a, j) => j.dps > a.dps ? j : a);
       if (top.short > 0) for (const lam of CDR_LAMBDAS.slice(1)) cands = cands.concat(makePlans(lam, keepEach));
@@ -356,16 +361,23 @@ function searchOne(ctx, now, start, { locked = [], cdrTarget = null, plans: keep
   function avatarStep(g, cur) {
     const layerVars = vars.filter(v => v.group === "avatar");
     if (!layerVars.length) return { g, v: cur };
-    const base = weights(g);
-    const cands = gatherPlans((lam, n) => avatarPlans(g, { ...base, cdr_all: lam }, layerVars, n));
-    // 다듬을 때 한 벌·5셋도 같이 다시 고른다 (크리·극대 균형이 아바타 악세와 맞물려 있어서)
+    // 5셋(레어 아바타)은 크리·극대 균형으로 무악 계획과 맞물려 있어서, 5셋마다 따로 계획을 뽑는다 (5셋을 고정했으면 지금 것만)
+    const armorVar = vars.find(v => v.key === "armor");
+    const armors = armorVar ? [armorVar.get(g)].concat(armorVar.values.filter(a => a !== armorVar.get(g))) : [null];
+    const per = keep;
+    const cands = [];
+    for (const a of armors) {
+      const ga = armorVar && a !== armorVar.get(g) ? apply(g, [[armorVar, a]]) : g, base = weights(ga);
+      cands.push(...gatherPlans((lam, n) => avatarPlans(ga, { ...base, cdr_all: lam }, layerVars, n), per));
+    }
+    // 다듬을 때 한 벌·5셋도 같이 다시 고른다
     return bestRealized(g, cur, cands, layerVars.concat(vars.filter(v => v.group === "wear")));
   }
   function avatarPlans(g, w, layerVars, n) {
     const slots = freeBest(layerVars, w, g);
     const groups = [];
     for (const [name, s] of Object.entries(SETS)) {
-      if (s.kind !== "avatar") continue;
+      if (s.kind !== "avatar" || OPTIMIZE_SKIP_SETS.has(name)) continue;
       const pieces = [];
       slots.forEach((sl, i) => {
         const best = sl.v.cands.filter(c => c.set === name).map(c => [c.name, lin(c.c, w)]).sort((a, b) => b[1] - a[1])[0];
@@ -484,7 +496,7 @@ function searchOne(ctx, now, start, { locked = [], cdrTarget = null, plans: keep
     for (const c of v.cands || []) if (SET_OF.has(c.name)) bySet.set(SET_OF.get(c.name), (bySet.get(SET_OF.get(c.name)) || []).concat([c.name]));
     for (const [set, names] of bySet) setSlots.set(set, (setSlots.get(set) || []).concat([[v, names]]));
   }
-  const setNames = [...setSlots.keys()].filter(n => SETS[n] && SETS[n].kind !== "armor");
+  const setNames = [...setSlots.keys()].filter(n => SETS[n] && SETS[n].kind !== "armor" && !OPTIMIZE_SKIP_SETS.has(n));
   const atmaVars = vars.filter(v => v.layer === "normal" && ATMA.pieces.includes(v.slot) && v.cands.some(c => c.atma));
 
   /**
@@ -518,14 +530,14 @@ function searchOne(ctx, now, start, { locked = [], cdrTarget = null, plans: keep
         }
       }
       // 세트 아이템 옮기기: 세트 아이템이 낀 칸 A를 그 칸에서 혼자 가장 좋은 다른 아이템으로 바꾸고, 대신 빈 칸 B에 그 세트를 낀다
-      const bestOther = (v, isPiece) => v.values.filter(x => !isPiece(x)).map(x => [x, single.get(v.key + "|" + x)]).sort((a, b) => b[1] - a[1])[0];
+      // 빼는 칸에 넣을 아이템: 혼자 바꿨을 때 좋은 순으로 3개까지 (세트 단계가 바뀌면 순서가 달라질 수 있어서)
+      const othersFor = (v, isPiece) => v.values.filter(x => !isPiece(x)).map(x => [x, single.get(v.key + "|" + x)]).sort((a, b) => b[1] - a[1]).slice(0, 3);
       const relocate = (slotsWith, isPiece, piecesFor) => {
         const holders = slotsWith.filter(v => isPiece(v.get(g)));
         const targets = slotsWith.filter(v => !isPiece(v.get(g)));
         for (const a of holders) {
-          const out = bestOther(a, isPiece);
-          if (!out) continue;
-          for (const b of targets) { const p = piecesFor(b); if (p) consider([[a, out[0]], [b, p]]); }
+          for (const out of othersFor(a, isPiece))
+            for (const b of targets) { const p = piecesFor(b); if (p) consider([[a, out[0]], [b, p]]); }
         }
       };
       for (const name of setNames) {
@@ -581,5 +593,5 @@ function searchOne(ctx, now, start, { locked = [], cdrTarget = null, plans: keep
     if (r.v > cur + 1e-12) ({ g, v: cur } = r);
   }
   const end = judge(g);
-  return { gear: g, gain: end.dps - 1, cdr: end.cdr, cdrMet: end.short === 0, evals, plans: planCount };
+  return { gear: g, gain: realScorer.evaluate(g).value - 1, cdr: end.cdr, cdrMet: end.short === 0, evals, plans: planCount };
 }
