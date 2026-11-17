@@ -14,14 +14,24 @@ function passiveText(stat, mult, add) {
   if (add) parts.push(`최종 +${Math.round(add * 100)}%`);
   return parts.join(" · ") || "없음";
 }
-const short = x => (x * 100).toFixed(1).replace(/\.0$/, "");
+const short = x => (x * 100).toFixed(2).replace(/\.?0+$/, "");
+/** 크뎀 패시브: 합연산 / 기본 크뎀 곱연산 / 크리 시 피해 */
+function critDmgText(job) {
+  const parts = [];
+  if (job.cd_s) parts.push(`+${short(job.cd_s)}%`);
+  if (job.cd_base) parts.push(`곱연산 ${short(job.cd_base)}%`);
+  if (job.cd_final) parts.push(`크리 시 피해 ${short(job.cd_final)}%`);
+  if (job.hp_crit_over || job.hp_crit_under) parts.push(`크리 시 피해 HP 50% 초과 ${short(job.hp_crit_over)}%·이하 ${short(job.hp_crit_under)}%`);
+  return parts.join(" · ") || "없음";
+}
 /** 상한을 넘은 양을 빨간 글씨로 */
 const overText = (v, k, prefix = "") => `<span class="over" title="${CAP_NOTES[k]}">${prefix}${trimPct(v)} 초과</span>`;
 
 export function renderSummary({ cls, job, resist, win, base, setup, buffs }) {
   // 전직·던전 안내
   $("field-info").textContent = `· 크리저항 ${Math.round(resist * 100)}% · 마계 디버프 ${Math.round((setup.debuff || 0) * 100)}%`;
-  $("cls-info").textContent = `${job.type} · 공격력 ${job.tier}티어 · 패시브: 크확 ${passiveText(job.crit_s, job.crit_m, job.crit_a)}, 극대 ${passiveText(job.maxi_s, job.maxi_m, job.maxi_a)}, 크뎀 +${short(job.cd_s)}%` + (job.boss ? `, 보뎀 +${short(job.boss)}%` : "");
+  $("cls-info").textContent = `${job.type} · 공격력 ${job.tier}티어 · 패시브: 크확 ${passiveText(job.crit_s, job.crit_m, job.crit_a)}, 극대 ${passiveText(job.maxi_s, job.maxi_m, job.maxi_a)}, 크뎀 ${critDmgText(job)}` +
+    (job.boss ? `, 보뎀 +${short(job.boss)}%` : "") + (job.atk_s ? `, 공격력 +${short(job.atk_s)}% (HP 연동)` : "");
   $("cls-extra").hidden = !CLASS_NOTES[cls]; $("cls-extra").textContent = CLASS_NOTES[cls] || "";
 
   // 버프 세팅이 실제로 어떤 수치로 들어갔는지
@@ -47,10 +57,11 @@ export function renderSummary({ cls, job, resist, win, base, setup, buffs }) {
   }
   // 재사용 시간 감소: 상한 35%까지 얼마나 남았는지
   if (has(base, "cdr_gang") || has(base, "cdr_cho")) {
-    const g = base.cdr_gang || 0, c = base.cdr_cho || 0, room = x => trimPct(Math.max(0, CDR_CAP - x));
+    const cap = job.cdr_cap != null ? job.cdr_cap : CDR_CAP;
+    const g = base.cdr_gang || 0, c = base.cdr_cho || 0, room = x => trimPct(Math.max(0, cap - x));
     const side = (x, k) => over[k] ? overText(over[k], k) : `${room(x)} 남음`;
     tiles.push(["쿨감 (강렬/초월)", `${trimPct(g)}/${trimPct(c)}`, over.cdr_gang || over.cdr_cho ? `${side(g, "cdr_gang")} / ${side(c, "cdr_cho")}` : `상한까지 ${room(g)} / ${room(c)}`, "",
-      "강렬·초월 스킬 재사용 시간 감소. 35%까지만 적용돼요. DPS 계산에는 넣지 않아요."]);
+      `강렬·초월 스킬 재사용 시간 감소. ${trimPct(cap)}까지만 적용돼요. DPS 계산에는 넣지 않아요.`]);
   }
   // 양극화: 상한(60%)을 넘었을 때만 보여 준다
   if (over.polar) tiles.push(["양극화", fmt(POLAR_CAP, 1), `스탯창 ${fmt(win.polar, 1)} · ${overText(over.polar, "polar")}`, "", CAP_NOTES.polar]);

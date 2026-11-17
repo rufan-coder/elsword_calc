@@ -21,7 +21,8 @@ const clamp01 = x => Math.min(1, Math.max(0, x));
 export const POLAR_CAP = 0.60;
 
 /** 패시브가 없는 전직 (전직을 고르지 않았을 때) */
-export const NO_PASSIVE = { crit_s: 0, crit_m: 0, crit_a: 0, cd_s: 0, cd_final: 0, cd_base: 0, maxi_s: 0, maxi_m: 0, maxi_a: 0, boss: 0, hp_over: 0, hp_under: 0, gang: 0, cho: 0 };
+export const NO_PASSIVE = { crit_s: 0, crit_m: 0, crit_a: 0, cd_s: 0, cd_final: 0, cd_base: 0, maxi_s: 0, maxi_m: 0, maxi_a: 0, boss: 0, hp_over: 0, hp_under: 0, gang: 0, cho: 0,
+  atk_s: 0, hp_crit_over: 0, hp_crit_under: 0, cdr_cap: null };
 
 export const has = (s, k) => typeof s[k] === "number" && isFinite(s[k]);
 export const hasCrit = s => has(s, "crit") && has(s, "crit_dmg");
@@ -39,6 +40,23 @@ function critWithEncourage(base, adds, uptime) {
 export function critFinal(s) {
   const base = s.crit * prod(s.crit_mults || []), adds = s.crit_adds || [];
   return clamp01(s.enc_uptime ? critWithEncourage(base, adds, s.enc_uptime) : base + sum(adds));
+}
+
+/** HP 50% 초과·이하 구간의 피해 비중 [초과, 이하]. 직업 가중치까지 곱한 값이고, 둘을 더해 1이 되게 나눈다 */
+function hpShares(s) {
+  const up = (1 + (s.hp_over || 0)) * prod(s.hp3_over || []), low = (1 + (s.hp_under || 0)) * prod(s.hp3_under || []);
+  return [up / (up + low), low / (up + low)];
+}
+
+/**
+ * 크리티컬 배율 (평균 크확과 크뎀을 합친 것) = 1 - p + p × 크뎀 × (1 + HP 구간 크리 피해).
+ * HP 구간 크리 피해는 크리티컬 타격에만 붙는 직업 효과(블러디 퀸 갈증)로, 두 HP 구간의 피해 비중으로 평균한다.
+ */
+export function critMult(s) {
+  const p = critFinal(s), [a, b] = s.hp_crit || [0, 0];
+  let bonus = 0;
+  if (a || b) { const [up, low] = hpShares(s); bonus = up * a + low * b; }
+  return 1 - p + p * s.crit_dmg * (1 + bonus);
 }
 
 /** 실전 극대화 */
@@ -104,9 +122,12 @@ export function resolve(win, job, critResist, setup) {
     s.maxi_adds = [c.maxi_a];
   }
   if (has(s, "boss")) s.boss = s.boss + setup.guild_boss + c.boss + (setup.town_boss || 0);
+  // 메타모르피의 HP 연동 공격력은 스탯형 공격력 %에 더해진다
+  if (has(s, "atk_pct")) s.atk_pct += c.atk_s || 0;
   if (has(s, "adapt")) { s.adapt_add = setup.town_adapt || 0; s.debuff = setup.debuff || 0; }
   for (const k of ["gang", "cho"]) if (has(s, k)) s[k] += c[k];
   s.hp3_over = [c.hp_over]; s.hp3_under = [c.hp_under];
+  s.hp_crit = [c.hp_crit_over || 0, c.hp_crit_under || 0];
   return s;
 }
 
@@ -125,7 +146,7 @@ export function dpsIndex(s) {
                                s._base_gang == null ? g : s._base_gang, s._base_cho == null ? c : s._base_cho);
     x *= Rc * (1 + c) + Rg * (1 + g);
   }
-  if (hasCrit(s)) { const p = critFinal(s); x *= 1 - p + p * s.crit_dmg; }
+  if (hasCrit(s)) x *= critMult(s);
   if (hasMaxi(s)) x *= maxiMult(maxiFinal(s), s.A, s.A_max);
   x *= hpMultiplier(s.hp_over || 0, s.hp_under || 0, s.hp3_over, s.hp3_under);
   if (has(s, "adapt")) x *= adaptMult(s);
@@ -135,9 +156,9 @@ export function dpsIndex(s) {
 
 /** 스탯창 크리티컬 확률이 critWindow 일 때의 크리티컬 배율 (평균 크확과 크뎀을 합친 것) */
 export function critFactor(win, job, critResist, setup, critWindow) {
-  const s = resolve({ crit: critWindow, crit_dmg: win.crit_dmg }, job, critResist, setup);
-  const p = critFinal(s);
-  return 1 - p + p * s.crit_dmg;
+  const w = { crit: critWindow, crit_dmg: win.crit_dmg };
+  for (const k of ["hp_over", "hp_under"]) if (has(win, k)) w[k] = win[k];   // HP 구간 크리 피해(블러디 퀸)의 평균에 쓴다
+  return critMult(resolve(w, job, critResist, setup));
 }
 
 /** 스탯창 극대화가 maxiWindow 일 때의 극대화 배율 */

@@ -2,7 +2,7 @@
 
 import { $, num, pct, pctOrZero } from "./dom.js";
 import { STAT_IDS } from "./state.js";
-import { CLASS } from "../data/classes.js";
+import { CLASS, withClassSkill } from "../data/classes.js";
 import { DUNGEONS } from "../data/dungeons.js";
 import { MAX_ENHANCE } from "../data/buffs.js";
 import { hasAtkPct, statAtkPct } from "../calc/stats.js";
@@ -43,5 +43,5 @@ export function readInputs() {
     stoneCdr: pctOrZero("enc_cdr"), stoneDur: pctOrZero("enc_dur"),
   });
   setup.debuff = DUNGEONS[dungeon].debuff;   // 적응력 계산에 쓴다
-  return { cls, job: CLASS[cls], dungeon, resist: DUNGEONS[dungeon].critResist, win, setup, town: $("town").value, buffs: detail, shareBlank: $("share_cho").value === "" };
+  return { cls, job: withClassSkill(cls, $("cls_skill").value), dungeon, resist: DUNGEONS[dungeon].critResist, win, setup, town: $("town").value, buffs: detail, shareBlank: $("share_cho").value === "" };
 }

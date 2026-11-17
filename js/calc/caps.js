@@ -6,8 +6,8 @@ import { POLAR_CAP, has, resolve, prod, sum } from "./stats.js";
 /** 상한 설명 (화면의 툴팁) */
 export const CAP_NOTES = {
   adapt: "적응력은 마을 버프와 합쳐 60%까지만 적용돼요.",
-  cdr_gang: "강렬한 스킬 재사용 시간 감소는 35%까지만 적용돼요.",
-  cdr_cho: "초월한 스킬 재사용 시간 감소는 35%까지만 적용돼요.",
+  cdr_gang: "강렬한 스킬 재사용 시간 감소는 35%까지만 적용돼요 (젬블리스는 24%).",
+  cdr_cho: "초월한 스킬 재사용 시간 감소는 35%까지만 적용돼요 (젬블리스는 24%).",
   polar: "양극화는 60%까지만 적용돼요.",
   crit: "버프·패시브까지 더한 실전 크리티컬이 100%를 넘은 만큼이에요 (격려 제외).",
   maxi: "버프·패시브까지 더한 실전 극대화가 100%를 넘은 만큼이에요.",
@@ -16,14 +16,15 @@ export const CAP_NOTES = {
 /**
  * 스탯창 값(win)에서 상한을 넘은 양. 넘지 않은 스탯은 빠진다.
  *   adapt            적응력 + 마을 버프 - 60%
- *   cdr_gang, cdr_cho 35% 를 넘은 양
+ *   cdr_gang, cdr_cho 35%(젬블리스 24%, job.cdr_cap)를 넘은 양
  *   polar            60% 를 넘은 양
  *   crit, maxi       실전 값(버프·패시브·크리저항 반영, 격려 제외)이 100% 를 넘은 양. job 이 있을 때만
  */
 export function capOver(win, setup, job, resist) {
   const out = {}, put = (k, v) => { if (v > 5e-5) out[k] = v; };
   if (has(win, "adapt")) put("adapt", win.adapt + ((setup && setup.town_adapt) || 0) - ADAPT_CAP);
-  for (const k of ["cdr_gang", "cdr_cho"]) if (has(win, k)) put(k, win[k] - CDR_CAP);
+  const cdrCap = (job && job.cdr_cap != null) ? job.cdr_cap : CDR_CAP;
+  for (const k of ["cdr_gang", "cdr_cho"]) if (has(win, k)) put(k, win[k] - cdrCap);
   if (has(win, "polar")) put("polar", win.polar - POLAR_CAP);
   if (job && setup) {
     const s = resolve(win, job, resist || 0, setup);

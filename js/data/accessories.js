@@ -325,7 +325,7 @@ export const SETS = {
   "블러디 나이트메어 무악": { kind: "avatar", stages: { 2: { crit: 0.02, polar: 0.05 }, 3: { add: 0.05 } } },
   "트루비용 어셈블 무악": { kind: "avatar", stages: { 2: { add: 0.05 }, 3: { adapt: 0.02, hp100: 0.03 } } },
   "비룡승운 무악": { kind: "avatar", stages: { 2: { cdr_all: 0.05, add: 0.03 }, 3: { polar: 0.07 } } },
-  "엠파이어 레인 무악": { kind: "avatar", stages: { 2: { hp100: 0.05 }, 3: { all_skill: 0.08, cd_mult: 0.01 } } },
+  "엠파이어 레인 무악": { kind: "avatar", stages: { 2: { hp100: 0.05 }, 3: { all_skill: 0.08 } } },   // 3셋 곱연 크뎀은 시트 ver.3.0.19에서 계산 제외
   "심연의 존재 무악": { kind: "avatar", stages: { 2: { add: 0.05 }, 3: { patk_pct: 0.07, matk_pct: 0.07, cdr_all: 0.05 } } },
   "비타 폰타나 무악": { kind: "avatar", stages: { 2: { polar: 0.05, cdr_all: 0.05 }, 3: { add: 0.07 } } },
   "에레보스 엘레지 무악": { kind: "avatar", stages: { 2: { hp100: 0.05 }, 3: { crit_dmg: 0.02, add: 0.07 } } },

@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@500;600;700&family=Noto+Sans+KR:wght@400;500;700&display=swap">
 <link rel="stylesheet" href="css/style.css">
-<meta name="build" content="ver.1.1.9">
+<meta name="build" content="ver.1.2.0">
 <script>
 // 배포 직후에는 브라우저에 새 파일과 예전 파일이 섞여 남을 수 있다 (js/build.js 참고).
 // 그 상태로 열려서 시작 중에 오류가 나면, 이 페이지가 쓰는 파일을 전부 새로 받아 딱 한 번만 다시 연다.
@@ -53,6 +53,7 @@
         <div class="grid two">
           <div class="field"><label for="cls">전직</label><select id="cls"></select></div>
           <div class="field"><label for="field">던전 <span id="field-info"></span></label><select id="field"></select></div>
+          <div class="field" id="cls_skill-wrap" hidden><label for="cls_skill" id="cls_skill-label">선택 스킬</label><select id="cls_skill"></select></div>
         </div>
         <p class="hint" id="cls-info" style="margin-top:10px"></p>
         <p class="warn" id="cls-extra" hidden></p>

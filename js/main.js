@@ -3,7 +3,7 @@
 //   입력칸 --readInputs()--> 스탯창 값·버프 --resolve()--> 실전 수치 --> 각 탭이 자기 결과를 그림
 
 import { $ } from "./ui/dom.js";
-import { DEFAULTS, loadState, snapshot, save, readSaved, saveTab, readTab } from "./ui/state.js";
+import { DEFAULTS, loadState, snapshot, save, readSaved, saveTab, readTab, fillClassSkill } from "./ui/state.js";
 import { initInputs, readInputs } from "./ui/inputs.js";
 import { renderSummary } from "./ui/summary.js";
 import { initCompare, renderCompare } from "./ui/compare-view.js";
@@ -68,6 +68,7 @@ function start() {
   if (saved) loadState(saved);
   syncSocketControls();
 
+  $("cls").addEventListener("change", () => fillClassSkill(""));   // 전직을 바꾸면 선택 스킬 칸을 그 전직의 기본값으로 먼저 맞춘다 (아래 render보다 먼저 실행됨)
   const wrap = document.querySelector(".wrap");
   wrap.addEventListener("input", render);
   wrap.addEventListener("change", render);

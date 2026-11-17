@@ -2,7 +2,7 @@
 
 import { $ } from "./dom.js";
 import { readOptionRows, setOptionRows } from "./compare-view.js";
-import { CLASS } from "../data/classes.js";
+import { CLASS, CLASS_SKILLS } from "../data/classes.js";
 import { DUNGEONS } from "../data/dungeons.js";
 import { STONES, SLOT_BASE } from "../data/stones.js";
 import { TOWN_BUFFS } from "../data/buffs.js";
@@ -19,7 +19,7 @@ const ALL_IDS = STAT_IDS.concat(SETUP_IDS, TOOL_IDS);
 
 /** 처음 열었을 때 채워 두는 예시 (트윈즈 피카로). 입력칸에 보이는 그대로의 단위다 */
 export const DEFAULTS = {
-  cls: "트윈즈 피카로", field: "네블론 레이드",
+  cls: "트윈즈 피카로", cls_skill: "", field: "네블론 레이드",
   crit: 83, crit_dmg: 199.4, maxi: 65.12, A: 124266, A_max: 169166, W: 44020, boss: 190, all_skill: 127.5, cho: 130.1, gang: 100.1,
   share_cho: 95, polar: 59.2, add: 91.5, hp_over: 34, hp_under: 34, hp100: 41.5,
   adapt: 59, super_adapt: 10, cdr_gang: 32, cdr_cho: 32,
@@ -31,19 +31,34 @@ export const DEFAULTS = {
   opts: [["힘트마", "boss", 6, ""], ["지트마", "cho", 5, ""], ["사냥석", "boss", 5, ""], ["기민석", "both", 4, ""], ["크리 마법석", "crit", 6, ""], ["극대 마법석", "maxi", 6, ""]],
 };
 
+/**
+ * 고른 전직에 선택 스킬이 있으면 선택지를 채워서 보여 주고, 없으면 숨긴다.
+ * value: 고를 값 (없거나 선택지에 없으면 지금 값, 그것도 없으면 기본값)
+ */
+export function fillClassSkill(value) {
+  const info = CLASS_SKILLS[$("cls").value], sel = $("cls_skill"), keep = value != null ? value : sel.value;
+  $("cls_skill-wrap").hidden = !info;
+  sel.length = 0;
+  if (!info) return;
+  $("cls_skill-label").textContent = `선택 스킬 · ${info.skill}`;
+  for (const name of Object.keys(info.options)) sel.add(new Option(name, name));
+  sel.value = info.options[keep] ? keep : info.default;
+}
+
 const KEY = "elsword-spec-calc-v2";
 const VERSION = 2;   // 저장 형식이 바뀔 때 올린다 (readSaved의 보정 참고)
 
 /** state를 화면 입력칸에 채운다 */
 export function loadState(state) {
   $("cls").value = state.cls; $("field").value = state.field;
+  fillClassSkill(state.cls_skill || "");
   for (const id of ALL_IDS) $(id).value = state[id] == null ? "" : state[id];
   setOptionRows(state.opts);
 }
 
 /** 지금 화면 입력값 전체 */
 export function snapshot() {
-  const s = { v: VERSION, cls: $("cls").value, field: $("field").value, opts: readOptionRows() };
+  const s = { v: VERSION, cls: $("cls").value, cls_skill: $("cls_skill").value, field: $("field").value, opts: readOptionRows() };
   for (const id of ALL_IDS) s[id] = $(id).value;
   return s;
 }
