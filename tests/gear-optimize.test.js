@@ -6,6 +6,7 @@ import { buildSetup } from "../js/calc/buffs.js";
 import { resolve } from "../js/calc/stats.js";
 import { capOver } from "../js/calc/caps.js";
 import { ACCESSORIES, WEAPON_AVATARS, OPTIMIZE_SKIP_SETS } from "../js/data/accessories.js";
+import { CLASS } from "../js/data/classes.js";
 import { near, PICARO } from "./helpers.js";
 
 const ctx = {
@@ -145,4 +146,18 @@ test("상한 초과: 크리티컬은 버프·패시브까지 더한 실전 값�
   const { job, resist, setup } = PICARO;
   assert.equal(capOver({ crit: 0.83, crit_dmg: 2 }, setup, job, resist).crit, undefined);
   assert.ok(capOver({ crit: 0.99, crit_dmg: 2 }, setup, job, 0).crit > 0);
+});
+
+test("상한 초과: 점감 전 합이 포화점(크리 140%, 극대 160%)을 넘은 만큼은 실전 값이 100% 아래여도 따로 센다", () => {
+  const { setup } = PICARO;
+  const win = { crit: 0.93, crit_dmg: 2, maxi: 0.95, A: 100000, A_max: 150000 };
+  // 리버레이터(크리·극대 스텟 합연 +20%): 크리 122.5 + 마을 5 + 20 = 147.5%, 극대 140 + 5 + 20 = 165%
+  const o = capOver(win, setup, CLASS["리버레이터"], 0.30);
+  assert.equal(typeof o.crit_sat, "number"); assert.equal(typeof o.maxi_sat, "number");
+  near(o.crit_sat, 0.075, 10); near(o.maxi_sat, 0.05, 10);
+  assert.equal(o.crit, undefined);                          // 실전 크리는 100% x 1.2204 - 저항 30% = 92%라 100% 아래
+  const p = capOver(win, setup, CLASS["트윈즈 피카로"], 0.30);  // 스텟 합연 패시브가 없으면 127.5%, 145%
+  assert.equal(p.crit_sat, undefined); assert.equal(p.maxi_sat, undefined);
+  const full = capOver({ crit: 1 }, setup, CLASS["트윈즈 피카로"], 0.30);
+  assert.equal(typeof full.crit_sat, "number"); near(full.crit_sat, 0.05, 10);   // 스탯창 100%면 최소 마을 버프만큼
 });

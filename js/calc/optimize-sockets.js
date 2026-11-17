@@ -26,7 +26,7 @@ export function optimizeSockets(win, job, critResist, setup, slots, per, cur, li
   const ok = { crit: hasCrit(win), maxi: hasMaxi(win), boss: has(win, "boss"), all: has(win, "all_skill"), skill: has(win, "cho") || has(win, "gang") };
 
   // 지금 박힌 수치를 뺀 바닥 값
-  const bossFixed = setup.guild_boss + c.boss;
+  const bossFixed = setup.guild_boss + c.boss + (setup.town_boss || 0);   // 길드·전직 패시브·마을 버프 보뎀
   const critStat = ok.crit ? Math.max(0, statFromCrit(win.crit) - q("crit")) : 0;
   const maxiStat = ok.maxi ? Math.max(0, statFromMaxi(win.maxi) - q("maxi")) : 0;
   const boss = Math.max(0, (win.boss || 0) - q("boss")), all = Math.max(0, (win.all_skill || 0) - q("all"));

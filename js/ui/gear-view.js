@@ -186,8 +186,9 @@ let lastCtx = null;
 let lastTownResults = null;   // 마지막 자동 찾기의 마을 버프별 결과   // 자동 찾기가 쓰는 마지막 스탯창·버프 값
 const hasWindow = win => Object.keys(win).some(k => k !== "share_cho" && k !== "share_gang");
 
-/** 상한을 넘은 양: 빨간 글씨 "1% 초과" (크리·극대화는 실전 값 기준) */
-const overSpan = (over, k) => over[k] ? `<span class="over" title="${esc(CAP_NOTES[k])}">${k === "crit" || k === "maxi" ? "실전 " : ""}${trimPct(over[k])} 초과</span>` : "";
+/** 상한을 넘은 양: 빨간 글씨 "1% 초과" (크리·극대화는 실전 값 기준, 점감 포화는 소켓 수치 기준) */
+const OVER_PREFIX = { crit: "실전 ", maxi: "실전 ", crit_sat: "점감 ", maxi_sat: "점감 " };
+const overSpan = (over, k) => over[k] ? `<span class="over" title="${esc(CAP_NOTES[k])}">${OVER_PREFIX[k] || ""}${trimPct(over[k])} 초과</span>` : "";
 
 /** 지킬 초월 쿨감: 입력칸 값, 비었으면 스탯창 값. 스탯창에 초월 쿨감이 없으면 null (지킬 수 없음) */
 function cdrTarget(win) {
@@ -248,7 +249,7 @@ export function renderGear({ win, job, resist, setup, town }) {
   // 스탯창 전체: 지금 -> 바꾼 뒤 (바뀐 줄은 굵게)
   const after = r.win, stat = x => (x * 100).toFixed(2) + "%";
   const overNow = capOver(win, setup, job, resist), overAfter = capOver(after, r.setup, job, resist), target = cdrTarget(win);
-  const mark = (w, over, k) => overSpan(over, k) + (k === "cdr_cho" ? shortSpan(w[k], target) : "");
+  const mark = (w, over, k) => overSpan(over, k) + (k === "crit" || k === "maxi" ? overSpan(over, k + "_sat") : "") + (k === "cdr_cho" ? shortSpan(w[k], target) : "");
   const lines = WINDOW_STATS.filter(([k]) => typeof win[k] === "number").map(([k, name]) => {
     const d = after[k] - win[k], diff = Math.abs(d) > 5e-5;
     return `<tr class="${diff ? "diff" : ""}"><td>${name}</td><td class="num">${stat(win[k])}${mark(win, overNow, k)}</td><td class="num">${stat(after[k])}${mark(after, overAfter, k)}</td><td class="num">${diff ? pctText(d).replace("%", "%p") : ""}</td></tr>`;

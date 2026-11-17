@@ -4,6 +4,7 @@ import { critFromStat, statFromCrit, maxiFromStat, statFromMaxi } from "../js/ca
 import { critFactor, maxiFactor, preShares } from "../js/calc/stats.js";
 import { optimizeCkb } from "../js/calc/optimize-ckb.js";
 import { optimizeSockets } from "../js/calc/optimize-sockets.js";
+import { CLASS } from "../js/data/classes.js";
 import { near, NISHA, PICARO } from "./helpers.js";
 
 const PER = { crit: 0.06, maxi: 0.06, boss: 0.03, all: 0.02, cho: 0.025, gang: 0.025, both: 0.02 };
@@ -14,6 +15,42 @@ test("크극 최적화: 시트 Main 예시와 같은 답 (크리 83.00%, 극대 
   near(r.crit, 0.8300); near(r.maxi, 0.6588, 3); near(r.gain, 0.0057, 4);
   near(r.dCrit, -0.055, 3); near(r.dMaxi, -0.040, 3);
   near(r.boss, 2.0304, 3);     // 시트 203.04% (시트는 0.1% 격자로 내림)
+});
+
+// 시트 ver.3.0.19 '크리·극대·보뎀 최적화'(Main S9) 식을 그대로 옮긴 것: 크리·극대를 0.1% 단위로 전부 나눠 보고 남은 만큼 보뎀.
+// 보뎀 배율의 고정 몫은 길드·전직·마을 버프 보뎀이다. 크리 최소·보뎀 하한은 없다.
+function sheetCkb(win, job, resist, setup, ratio) {
+  const step = 0.001, budget = statFromCrit(win.crit) + statFromMaxi(win.maxi) + win.boss / ratio, units = Math.floor(budget / step + 1e-9);
+  const fixed = 1 + setup.guild_boss + job.boss + (setup.town_boss || 0);
+  const M = [];
+  for (let j = 0; j <= Math.min(1600, units); j++) M[j] = maxiFactor(win, job, resist, setup, maxiFromStat(j * step));
+  const base = critFactor(win, job, resist, setup, win.crit) * maxiFactor(win, job, resist, setup, win.maxi) * (fixed + win.boss);
+  let best = { v: base, i: null, j: null };
+  for (let i = 0; i <= Math.min(1400, units); i++) {
+    const c = critFactor(win, job, resist, setup, critFromStat(i * step));
+    for (let j = 0; j <= Math.min(1600, units - i); j++) {
+      const v = c * M[j] * (fixed + Math.max(0, budget - step * (i + j)) * ratio);
+      if (v > best.v * (1 + 1e-12)) best = { v, i, j };
+    }
+  }
+  return { crit: critFromStat(best.i * step), maxi: maxiFromStat(best.j * step), boss: (budget - step * (best.i + best.j)) * ratio, gain: best.v / base - 1 };
+}
+
+test("크극 최적화: 크극 스텟 합연 +20% 전직(리버레이터·라디언트 소울)도 시트 식과 같은 답 (마을 버프 보뎀 포함)", () => {
+  const { win, resist } = PICARO, setup = { ...PICARO.setup, town_boss: 0.02 };   // 엘 하우스(강화) 보뎀 2%
+  for (const name of ["리버레이터", "라디언트 소울"]) for (const bossPer of [0.03, 0.025]) {
+    const job = CLASS[name], r = optimizeCkb(win, job, resist, setup, { bossPer, minCrit: 0.25 }), s = sheetCkb(win, job, resist, setup, bossPer / 0.06);
+    near(r.crit, s.crit, 9); near(r.maxi, s.maxi, 9); near(r.boss, s.boss, 9); near(r.gain, s.gain, 12);
+  }
+});
+
+test("크극·소켓 최적화: 마을 버프 보뎀은 길드 보뎀처럼 고정 몫으로 들어간다", () => {
+  const { win, job, resist } = PICARO;
+  const town = { ...PICARO.setup, town_boss: 0.02 }, guild = { ...PICARO.setup, guild_boss: PICARO.setup.guild_boss + 0.02 };
+  const a = optimizeCkb(win, job, resist, town, { bossPer: 0.03, minCrit: 0.25 }), b = optimizeCkb(win, job, resist, guild, { bossPer: 0.03, minCrit: 0.25 });
+  near(a.boss, b.boss, 12); near(a.gain, b.gain, 12);
+  const w = { ...win, all_skill: 1.28 }, sa = optimizeSockets(w, job, resist, town, 8, PER, {}), sb = optimizeSockets(w, job, resist, guild, 8, PER, {});
+  assert.deepEqual(sa.counts, sb.counts); near(sa.gain, sb.gain, 12);
 });
 
 test("크극 최적화: 지금보다 나빠지는 답은 내지 않는다", () => {
@@ -39,7 +76,7 @@ test("소켓 한 칸의 가치: 시트의 '효율(상승배율)' 7개 값과 일
 // limits: 종류별 최대 칸 수 (없으면 제한 없음)
 function bruteForce(win, job, resist, setup, slots, cur, limits = {}) {
   const [Rg, Rc] = preShares(win.share_gang, win.share_cho, win.gang, win.cho);
-  const bossFixed = setup.guild_boss + job.boss;
+  const bossFixed = setup.guild_boss + job.boss + (setup.town_boss || 0);
   const value = (n, removed) =>
     critFactor(win, job, resist, setup, critFromStat(statFromCrit(win.crit) - (removed.crit || 0) + n.crit * PER.crit)) *
     maxiFactor(win, job, resist, setup, maxiFromStat(statFromMaxi(win.maxi) - (removed.maxi || 0) + n.maxi * PER.maxi)) *

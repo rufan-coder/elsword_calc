@@ -21,7 +21,7 @@ export function optimizeCkb(win, job, critResist, setup, opt) {
   const rate = CRIT_MAXI_PER_SLOT / opt.bossPer;        // 보뎀 1%가 크리·극대 몇 %와 같은 값인지
   const sc0 = statFromCrit(win.crit), sm0 = statFromMaxi(win.maxi), b0 = win.boss;
   const pool = sc0 + sm0 + rate * b0;                   // 나눠 쓸 수 있는 총량 (크리·극대 수치 기준)
-  const bossFixed = setup.guild_boss + c.boss;
+  const bossFixed = setup.guild_boss + c.boss + (setup.town_boss || 0);   // 길드·전직 패시브·마을 버프 보뎀 (소켓으로 못 바꾸는 몫)
   const bossMin = Math.min(b0, 0.6);                    // 장비 고유 보뎀 등 소켓이 아닌 몫은 남겨 둔다
   const iMin = Math.max(0, Math.ceil(Math.min(sc0, opt.minCrit || 0) / STEP - 1e-9));
   // 최종 확률이 100%에 닿은 뒤로는 더 넣어도 의미가 없으므로 거기까지만 본다

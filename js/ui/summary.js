@@ -44,10 +44,10 @@ export function renderSummary({ cls, job, resist, win, base, setup, buffs }) {
   const over = capOver(win, setup, job, resist);
   const tiles = [];
   if (hasCrit(base)) {
-    tiles.push(["평균 크리티컬 확률", fmt(critFinal(base), 1), `스탯창 ${fmt(win.crit, 1)}` + (over.crit ? ` · ${overText(over.crit, "crit")}` : "")]);
+    tiles.push(["평균 크리티컬 확률", fmt(critFinal(base), 1), `스탯창 ${fmt(win.crit, 1)}` + (over.crit ? ` · ${overText(over.crit, "crit")}` : "") + (over.crit_sat ? ` · ${overText(over.crit_sat, "crit_sat", "점감 ")}` : "")]);
     tiles.push(["크리티컬 데미지", fmt(base.crit_dmg, 1), `스탯창 ${fmt(win.crit_dmg, 1)}`]);
   }
-  if (hasMaxi(base)) tiles.push(["최종 극대화", fmt(maxiFinal(base), 1), `스탯창 ${fmt(win.maxi, 1)}` + (over.maxi ? ` · ${overText(over.maxi, "maxi")}` : "")]);
+  if (hasMaxi(base)) tiles.push(["최종 극대화", fmt(maxiFinal(base), 1), `스탯창 ${fmt(win.maxi, 1)}` + (over.maxi ? ` · ${overText(over.maxi, "maxi")}` : "") + (over.maxi_sat ? ` · ${overText(over.maxi_sat, "maxi_sat", "점감 ")}` : "")]);
   if (has(win, "atk_pct")) tiles.push(["공격력 % (스텟)", fmt(win.atk_pct, 2), win.atk_pct < 0 ? "값을 확인하세요" : "무기 공격력으로 역산"]);
   // 적응력: 디버프를 얼마나 막았는지. 적응력이 상한이면 초적응력만 의미가 있다
   if (has(base, "adapt")) {
