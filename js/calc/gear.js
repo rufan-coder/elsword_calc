@@ -9,6 +9,7 @@
 //     atma:    { element: "유수", grades: { face_mid, face_low, arm, neck } }                       아트마 속성과 부위별 등급
 //     avatarSets: [세트 이름...] | null   무악 세트를 4개 이상 맞췄을 때 켜 둔 세트 (null 이면 자동)
 //     town:    마을 버프 이름 | null      바꿔 볼 마을 버프 (null 이면 스펙 계산에서 고른 버프 그대로)
+//     spirit:  0~2 | null                 아티팩트 정령석 중 양극화로 고른 개수 (나머지는 물마). null 이면 입력 안 함
 //   }
 //
 // 계산 방법
@@ -16,7 +17,7 @@
 //     바꾼 뒤 스탯창 = 지금 스탯창 - 지금 장비의 "보이는 효과" + 바꾼 장비의 "보이는 효과"
 //   곱연 크뎀과 최종 데미지는 스탯창에 안 보이므로 양쪽 모두 따로 곱해서 비교한다.
 
-import { ACCESSORIES, NEW_ACCESSORIES, ARMOR_AVATARS, WEAPON_AVATARS, OUTFITS, WEAPONS, SETS, ATMA, AVATAR_SET_LIMIT } from "../data/accessories.js";
+import { ACCESSORIES, NEW_ACCESSORIES, ARMOR_AVATARS, WEAPON_AVATARS, OUTFITS, WEAPONS, SETS, ATMA, AVATAR_SET_LIMIT, SPIRIT_STONES } from "../data/accessories.js";
 import { critFromStat, statFromCrit, maxiFromStat, statFromMaxi } from "./diminish.js";
 import { resolve, dpsIndex, has } from "./stats.js";
 import { setupWithTown } from "./buffs.js";
@@ -38,7 +39,14 @@ export const STAT_NAMES = {
 
 export const emptyGear = () => ({
   avatar: {}, normal: {}, outfit: null, wavatar: null, weapon: null, armor: {},
-  atma: { element: "유수", grades: {} }, avatarSets: null, town: null,
+  atma: { element: "유수", grades: {} }, avatarSets: null, town: null, spirit: null,
+});
+
+/** 아티팩트 정령석 효과: 양극화로 고른 개수(0~2)마다 하나씩 만들어 둔다 (prepared 가 묶음 단위로 기억하므로) */
+const SPIRIT_FX = Array.from({ length: SPIRIT_STONES.count + 1 }, (_, n) => {
+  const out = {}, add = (stats, times) => { for (const [k, v] of Object.entries(stats)) out[k] = (out[k] || 0) + v * times; };
+  add(SPIRIT_STONES.polar, n); add(SPIRIT_STONES.atk, SPIRIT_STONES.count - n);
+  return out;
 });
 
 /** 아트마 악세 등급: 만다라는 이름에, 나머지는 따로 고른 값에 있다 */
@@ -136,6 +144,7 @@ export function gearEffects(gear, atkType, avatarChoice, ignore) {
     if (ARMOR_AVATARS[set]) addStats(acc, ARMOR_AVATARS[set][piece], atkType);
     else if (set) acc.unknown.push(`${set} (레어 아바타)`);
   }
+  if (gear.spirit != null && SPIRIT_FX[gear.spirit]) addStats(acc, SPIRIT_FX[gear.spirit], atkType);
 
   // 세트 효과. 무악 세트는 AVATAR_SET_LIMIT 개까지만
   const all = setStages(countSets(gear), ignore);
@@ -230,7 +239,9 @@ export function gearScorer(ctx, beforeGear, { ignoreSets = null } = {}) {
   };
   // 바꾼 쪽은 사용자가 고르지 않았으면 가장 좋은 무악 세트 조합을 고른다
   const evaluate = g => afterFor(g, g.avatarSets || bestAvatarChoice(g, names => afterFor(g, names).value, ignoreSets));
-  return { before, evaluate, valueOf };
+  /** 효과 묶음을 반영한 스탯창과 버프 (자동 찾기가 상한 초과를 잴 때 쓴다) */
+  const windowOf = (fx, g) => ({ win: shiftWindow(win, minus(fx.visible, before.visible)).win, setup: setupFor(g) });
+  return { before, evaluate, valueOf, windowOf };
 }
 
 /**

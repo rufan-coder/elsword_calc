@@ -11,6 +11,9 @@
 //   4) 아바타 쪽 -> 일반 악세 쪽 -> 한 벌·5셋 순서로 되풀이한다 (한쪽이 바뀌면 스탯 가치가 바뀌므로)
 //   5) 마지막으로 칸 하나 바꾸기·세트 채우기를 정확한 계산으로 더 좋아지지 않을 때까지 해 본다 (다듬기)
 //
+// 상한 초과(양극화·적응력·쿨감·실전 크리/극대 100%·점감 포화)는 DPS에 도움이 안 되므로, 넘은 1%p마다 DPS 0.01%만큼
+// 손해로 쳐서(OVER_PENALTY) DPS가 거의 같으면 넘치는 것이 적은 조합을 고르게 한다. 보여 주는 DPS 변화에는 이 몫이 없다.
+//
 // 쿨감은 DPS에 넣지 않는다. 대신 "바꾼 뒤 초월한 스킬 재사용 시간 감소가 목표(cdrTarget) 아래로 내려가지 않게" 지킨다.
 //   - 목표보다 모자라면 1%p마다 아주 큰 값을 깎아서, 목표를 먼저 지키고 그 안에서 DPS가 가장 높은 것을 고르게 한다
 //     (목표를 못 맞추는 경우에는 가장 가깝게 맞춘다)
@@ -28,6 +31,7 @@
 import { ACCESSORIES, ACC_SLOTS, WEAPON_AVATARS, OUTFITS, ARMOR_AVATARS, SETS, ATMA, AVATAR_SET_LIMIT, OPTIMIZE_SKIP_SETS } from "../data/accessories.js";
 import { gearScorer, gearEffects, countSets, IGNORED } from "./gear.js";
 import { TOWN_BUFFS } from "../data/buffs.js";
+import { capOver } from "./caps.js";
 
 const ARMOR_PIECES = ["hair", "top", "bottom", "gloves", "shoes"];
 const ATMA_GRADED = ATMA.pieces.filter(s => s !== "top");
@@ -38,11 +42,15 @@ const ATMA_NAMES = new Set(ACCESSORIES.filter(a => a.atma).map(a => a.name));
 const CDR_PENALTY = 1000;
 /** 어림할 때 쿨감 1(=100%p)의 가치. 0 = 쿨감 무시, 클수록 쿨감 아이템을 먼저 고른다 */
 const CDR_LAMBDAS = [0, 0.3, 1, 5];
+/** 상한 초과 1(=100%p)마다 깎는 값. 1%p 넘치면 DPS 0.01%를 잃는 것으로 본다 (DPS를 조금 손해 봐도 초과를 줄인다) */
+export const OVER_PENALTY = 0.01;
+/** 상한을 넘은 양의 합 (capOver 의 모든 항목: 적응력, 강렬·초월 쿨감, 양극화, 실전 크리·극대, 크리·극대 점감 포화) */
+export const overTotal = (win, setup, job, resist) => Object.values(capOver(win, setup, job, resist)).reduce((a, x) => a + x, 0);
 
 /** 고정할 수 있는 칸의 이름: "avatar.weapon", "normal.ring2", "outfit", "wavatar", "armor"(5셋), "element"(아트마 속성) */
 export const LOCKABLE = [
   ...["avatar", "normal"].flatMap(layer => ACC_SLOTS.map(s => `${layer}.${s.key}`).concat(layer === "normal" ? ["normal.ring2"] : [])),
-  "outfit", "wavatar", "armor", "element", "town",
+  "outfit", "wavatar", "armor", "element", "town", "spirit",
 ];
 
 // ----- 후보 줄이기: 다른 후보보다 모든 면에서 나을 게 없는 아이템은 뺀다 -----
@@ -96,6 +104,8 @@ function variables(atkType) {
   vars.push({ key: "outfit", group: "wear", cands: outfits, values: outfits.map(o => o.name), get: g => g.outfit || null, set: (g, v) => { g.outfit = v; } });
   vars.push({ key: "armor", group: "wear", values: Object.keys(ARMOR_AVATARS).filter(n => !OPTIMIZE_SKIP_SETS.has(n)), get: g => g.armor.hair || null, set: (g, v) => { for (const p of ARMOR_PIECES) g.armor[p] = v; } });
   vars.push({ key: "element", group: "element", values: ATMA_ELEMENTS, get: g => g.atma.element, set: (g, v) => { g.atma.element = v; } });
+  // 아티팩트 정령석: 양극화로 고를 개수 0~2 (나머지는 물마)
+  vars.push({ key: "spirit", group: "wear", values: [0, 1, 2], get: g => (g.spirit == null ? null : g.spirit), set: (g, v) => { g.spirit = v; } });
   return vars;
 }
 
@@ -104,6 +114,7 @@ function variables(atkType) {
 const clone = g => ({
   avatar: { ...g.avatar }, normal: { ...g.normal }, outfit: g.outfit || null, wavatar: g.wavatar || null, weapon: g.weapon || null,
   armor: { ...g.armor }, atma: { element: g.atma.element, grades: { ...g.atma.grades } }, avatarSets: null, town: g.town || null,
+  spirit: g.spirit == null ? null : g.spirit,
 });
 const validRings = g => !g.normal.ring || g.normal.ring !== g.normal.ring2;
 const setOf = name => { const a = ACCESSORIES.find(x => x.name === name) || WEAPON_AVATARS.find(x => x.name === name); return a && !a.atma && a.set !== "없음" ? a.set : null; };
@@ -218,8 +229,9 @@ function bestPlans(slots, groups, limit, keep) {
  * opts   : { locked: 고정할 칸 이름 목록 (LOCKABLE 참고. "town" 이면 마을 버프도 지금 그대로), towns: 따져 볼 마을 버프 (기본 townsToTry),
  *            cdrTarget: 지킬 초월 쿨감 (0.32 = 32%, 없으면 null),
  *            plans: 정확히 계산해 볼 계획 수, rounds: 마지막에 무작위로 흔들어 볼 횟수, kicks: 한 번에 흔드는 최대 개수, seed }
- * 반환   : { gear, gain, cdr, cdrMet, evals, plans, byTown }
+ * 반환   : { gear, gain, score, over, overNow, cdr, cdrMet, evals, plans, byTown }
  *            gear: 찾은 장착 상태 (gear.town = 바꿀 마을 버프, 지금 그대로면 null), gain: 지금 대비 DPS 변화,
+ *            score: gain - 상한 초과 몫 (찾을 때 쓴 점수), over / overNow: 바꾼 뒤 / 지금 상한 초과 합,
  *            cdr: 바꾼 뒤 초월 쿨감, cdrMet: 목표를 지켰는지, evals: 정확히 계산한 조합 수, plans: 어림해 본 세트 계획 수,
  *            byTown: 마을 버프마다 찾은 결과 [{ town: 버프 이름, gear, gain, cdr, cdrMet }] (좋은 순)
  *
@@ -237,7 +249,7 @@ export function optimizeGear(ctx, now, opts = {}) {
     return Object.assign(r, { town: town || current });
   }));
   const best = byTown[0];
-  return { gear: best.gear, gain: best.gain, cdr: best.cdr, cdrMet: best.cdrMet, evals, plans, byTown };
+  return { gear: best.gear, gain: best.gain, score: best.score, over: best.over, overNow: best.overNow, cdr: best.cdr, cdrMet: best.cdrMet, evals, plans, byTown };
 }
 
 /** 따져 볼 마을 버프 목록 (null = 스펙 계산에서 고른 버프 그대로). 화면에서 버프 하나씩 나눠 돌릴 때 쓴다 */
@@ -246,9 +258,10 @@ export function townsToTry(ctx, locked = []) {
   return locked.includes("town") || !current ? [null] : [null].concat(TOWN_CHOICES.filter(n => n !== current));
 }
 
-/** 마을 버프별 결과 정렬: 쿨감 목표를 지킨 것 먼저, 그다음 DPS 순 (같으면 앞에 있던 것 = 지금 버프가 앞) */
+/** 마을 버프별 결과 정렬: 쿨감 목표를 지킨 것 먼저, 그다음 점수(DPS - 상한 초과 몫) 순 (같으면 앞에 있던 것 = 지금 버프가 앞) */
 export function sortByTown(list) {
-  return list.slice().sort((a, b) => (b.cdrMet - a.cdrMet) || (b.gain - a.gain > 1e-12 ? 1 : a.gain - b.gain > 1e-12 ? -1 : 0));
+  const sc = x => (x.score == null ? x.gain : x.score);
+  return list.slice().sort((a, b) => (b.cdrMet - a.cdrMet) || (sc(b) - sc(a) > 1e-12 ? 1 : sc(a) - sc(b) > 1e-12 ? -1 : 0));
 }
 
 /** 마을 버프 하나(start.town)로 찾는다. 기준(지금 대비)은 언제나 now 와 스펙 계산의 마을 버프다 */
@@ -271,14 +284,15 @@ function searchOne(ctx, now, start, { locked = [], cdrTarget = null, plans: keep
       evals++;
       const r = scorer.evaluate(g), cdr = r.shifted.win.cdr_cho;
       const short = useCdr ? Math.max(0, cdrTarget - cdr) : 0;
-      j = { dps: r.value, cdr, short: short > 1e-9 ? short : 0 };
+      j = { dps: r.value, cdr, short: short > 1e-9 ? short : 0, over: overTotal(r.shifted.win, r.setup, ctx.job, ctx.resist) };
       memo.set(key, j);
     }
     return j;
   };
-  const value = g => { const j = judge(g); return j.dps - CDR_PENALTY * j.short; };
+  const value = g => { const j = judge(g); return j.dps - CDR_PENALTY * j.short - OVER_PENALTY * j.over; };
   const lock = new Set(locked);
-  const all = variables(atkType), vars = all.filter(v => !lock.has(v.key));
+  // 정령석은 지금 낀 것을 입력했을 때만 바꿔 본다 (모르면 스탯창에서 빼 줄 수가 없다)
+  const all = variables(atkType), vars = all.filter(v => !lock.has(v.key) && !(v.key === "spirit" && now.spirit == null));
   const byKey = new Map(all.map(v => [v.key, v]));
   const elementVar = vars.find(v => v.key === "element");
   /** 속성 후보. 지금 속성을 맨 앞에 둬서, 효과가 같은 속성(유수·화염)끼리는 괜히 바꾸라고 하지 않게 한다 */
@@ -312,11 +326,13 @@ function searchOne(ctx, now, start, { locked = [], cdrTarget = null, plans: keep
   }
   function weights(g) {
     const fx = scorer.evaluate(g).fx, v0 = scorer.valueOf(fx, g), d = 0.01, w = {};
+    const overOf = f => { const x = scorer.windowOf(f, g); return overTotal(x.win, x.setup, ctx.job, ctx.resist); }, o0 = overOf(fx);
     for (const k of KEYS) {
       const fx1 = k === "cd_mult" ? { visible: fx.visible, cdMults: fx.cdMults.concat([d]), finals: fx.finals }
         : k === "final" ? { visible: fx.visible, cdMults: fx.cdMults, finals: fx.finals.concat([d]) }
         : { visible: { ...fx.visible, [k]: (fx.visible[k] || 0) + d }, cdMults: fx.cdMults, finals: fx.finals };
-      w[k] = (scorer.valueOf(fx1, g) / v0 - 1) / d;
+      // 상한을 넘기는 스탯은 넘치는 만큼 깎는다 (정확한 계산의 value 와 같은 기준)
+      w[k] = (scorer.valueOf(fx1, g) / v0 - 1) / d - OVER_PENALTY * (overOf(fx1) - o0) / d;
     }
     return w;
   }
@@ -592,6 +608,9 @@ function searchOne(ctx, now, start, { locked = [], cdrTarget = null, plans: keep
     const r = climb(n, value(n));
     if (r.v > cur + 1e-12) ({ g, v: cur } = r);
   }
-  const end = judge(g);
-  return { gear: g, gain: realScorer.evaluate(g).value - 1, cdr: end.cdr, cdrMet: end.short === 0, evals, plans: planCount };
+  const end = judge(g), gain = realScorer.evaluate(g).value - 1;
+  return {
+    gear: g, gain, cdr: end.cdr, cdrMet: end.short === 0, evals, plans: planCount,
+    over: end.over, overNow: overTotal(ctx.win, ctx.setup, ctx.job, ctx.resist), score: gain - OVER_PENALTY * end.over,
+  };
 }

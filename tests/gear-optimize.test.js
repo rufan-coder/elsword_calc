@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { optimizeGear, LOCKABLE } from "../js/calc/gear-optimize.js";
+import { optimizeGear, LOCKABLE, OVER_PENALTY, overTotal } from "../js/calc/gear-optimize.js";
 import { gearScorer, gearEffects, emptyGear, compareGear } from "../js/calc/gear.js";
 import { buildSetup } from "../js/calc/buffs.js";
 import { resolve } from "../js/calc/stats.js";
@@ -52,6 +52,7 @@ test("자동 찾기: 고정한 칸은 지금 것 그대로 둔다", () => {
 
 test("자동 찾기: 칸이 몇 개뿐일 때는 모든 경우를 다 따져 본 답과 같다", () => {
   // 아바타 상의·얼굴(중)·목걸이, 무기 아바타만 풀고 나머지는 모두 고정 -> 모든 조합을 직접 계산해서 비교
+  // 비교 기준은 자동 찾기와 같은 점수: DPS 변화 - 상한 초과 몫
   const open = ["avatar.top", "avatar.face_mid", "avatar.neck", "wavatar"];
   const locked = LOCKABLE.filter(k => !open.includes(k));
   const r = optimizeGear(ctx, NOW, { locked });
@@ -61,9 +62,10 @@ test("자동 찾기: 칸이 몇 개뿐일 때는 모든 경우를 다 따져 본
   for (const top of items("top")) for (const mid of items("face_mid")) for (const neck of items("neck")) for (const w of WEAPON_AVATARS) {
     const g = structuredClone(NOW);
     Object.assign(g.avatar, { top, face_mid: mid, neck }); g.wavatar = w.name;
-    best = Math.max(best, score(g).value - 1);
+    const e = score(g);
+    best = Math.max(best, e.value - 1 - OVER_PENALTY * overTotal(e.shifted.win, e.setup, ctx.job, ctx.resist));
   }
-  near(r.gain, best, 12);
+  assert.equal(typeof r.score, "number"); near(r.score, best, 12);
 });
 
 test("자동 찾기: 같은 입력이면 늘 같은 답", () => {
@@ -92,7 +94,8 @@ test("자동 찾기: 쿨감은 DPS에 안 넣고, 목표 초월 쿨감 아래로
   assert.ok(free.cdr < 0.32);                                   // 목표가 없으면 쿨감은 신경 쓰지 않는다
   assert.ok(kept.cdrMet && kept.cdr >= 0.32 - 1e-9);
   assert.ok(high.cdrMet && high.cdr >= 0.36 - 1e-9);
-  assert.ok(free.gain >= kept.gain - 1e-12 && kept.gain >= high.gain - 1e-12);   // 조건이 빡빡할수록 DPS는 같거나 낮다
+  assert.ok([free, kept, high].every(x => typeof x.score === "number"));
+  assert.ok(free.score >= kept.score - 1e-12 && kept.score >= high.score - 1e-12);   // 조건이 빡빡할수록 점수(DPS - 상한 초과 몫)는 같거나 낮다
   // 쿨감 악세를 바꿔도 DPS 변화에는 쿨감 몫이 없다
   const sc = gearScorer(ctx, now);
   const noCdr = structuredClone(now); noCdr.avatar.arm = null;
@@ -128,7 +131,7 @@ test("마을 버프: 자동 찾기는 버프마다 따로 찾아 비교하고, �
   const r = optimizeGear(c, NOW, { locked });
   assert.deepEqual(r.byTown.map(x => x.town).sort(), ["수색대원의 결의", "엘 하우스(강화)"]);   // 온천은 엘 하우스보다 나을 수 없어서 뺀다
   assert.equal(r.gain, r.byTown[0].gain);
-  for (let i = 1; i < r.byTown.length; i++) assert.ok(r.byTown[i - 1].gain >= r.byTown[i].gain - 1e-12);
+  for (let i = 1; i < r.byTown.length; i++) assert.ok(r.byTown[i - 1].score >= r.byTown[i].score - 1e-12 && typeof r.byTown[i].score === "number");
   near(gearScorer(c, NOW).evaluate(r.gear).value - 1, r.gain, 12);
   const fixed = optimizeGear(c, NOW, { locked: locked.concat(["town"]) });
   assert.equal(fixed.byTown.length, 1);
@@ -160,4 +163,33 @@ test("상한 초과: 점감 전 합이 포화점(크리 140%, 극대 160%)을 �
   assert.equal(p.crit_sat, undefined); assert.equal(p.maxi_sat, undefined);
   const full = capOver({ crit: 1 }, setup, CLASS["트윈즈 피카로"], 0.30);
   assert.equal(typeof full.crit_sat, "number"); near(full.crit_sat, 0.05, 10);   // 스탯창 100%면 최소 마을 버프만큼
+});
+
+test("아티팩트 정령석: 두 개를 물마 2% 또는 양극화 2%로 센다 (입력 안 하면 계산에서 뺀다)", () => {
+  const fx = n => gearEffects(Object.assign(emptyGear(), { spirit: n }), "마법").visible;
+  assert.deepEqual(fx(null), {});
+  near(fx(0).atk_pct, 0.04, 12); near(fx(0).polar || 0, 0, 12);
+  near(fx(1).atk_pct, 0.02, 12); near(fx(1).polar, 0.02, 12);
+  near(fx(2).atk_pct || 0, 0, 12); near(fx(2).polar, 0.04, 12);
+});
+
+test("아티팩트 정령석: 양극화가 넘치면 자동 찾기가 물마로 바꾸고, 입력 안 했으면 건드리지 않는다", () => {
+  const c = { ...ctx, win: { ...ctx.win, polar: 0.62 } };
+  const locked = LOCKABLE.filter(k => k !== "spirit");
+  const r = optimizeGear(c, Object.assign(structuredClone(NOW), { spirit: 2 }), { locked });
+  assert.notEqual(r.gear.spirit, 2);
+  assert.ok(r.gain > 0);
+  const after = gearScorer(c, Object.assign(structuredClone(NOW), { spirit: 2 })).evaluate(r.gear).shifted.win;
+  assert.ok(after.polar <= 0.60 + 1e-9);
+  assert.equal(optimizeGear(c, NOW, { locked }).gear.spirit, null);
+});
+
+test("상한 초과: DPS가 같으면 넘치는 것이 적은 쪽을 고른다", () => {
+  // 공격력 %(스텟)가 비어 있으면 물마는 DPS에 안 들어간다. 양극화는 이미 60%를 넘어서 정령석 셋 다 DPS가 같다 -> 넘치지 않는 쪽
+  const win = { ...ctx.win, polar: 0.64 }; delete win.atk_pct;
+  const c = { ...ctx, win };
+  const r = optimizeGear(c, Object.assign(structuredClone(NOW), { spirit: 2 }), { locked: LOCKABLE.filter(k => k !== "spirit") });
+  assert.equal(r.gear.spirit, 0);
+  near(r.gain, 0, 12);
+  assert.equal(typeof r.over, "number"); near(r.overNow - r.over, 0.04, 9);
 });

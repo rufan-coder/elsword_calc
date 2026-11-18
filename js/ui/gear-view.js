@@ -5,7 +5,7 @@ import { $, esc, signed, trimPct } from "./dom.js";
 import { ACC_SLOTS, ACCESSORIES, NEW_ACCESSORIES, ARMOR_AVATARS, WEAPON_AVATARS, OUTFITS, WEAPONS, ATMA, AVATAR_SET_LIMIT } from "../data/accessories.js";
 import { ICONS } from "../data/icons.js";
 import { compareGear, emptyGear, STAT_NAMES, IGNORED } from "../calc/gear.js";
-import { optimizeGear, townsToTry, sortByTown } from "../calc/gear-optimize.js";
+import { optimizeGear, townsToTry, sortByTown, OVER_PENALTY } from "../calc/gear-optimize.js";
 import { TOWN_BUFFS } from "../data/buffs.js";
 import { capOver, CAP_NOTES } from "../calc/caps.js";
 import { findCharWindow, equipCells } from "../ocr/equip-window.js";
@@ -17,15 +17,15 @@ const SAME = "=";   // "바꿔 보기"에서 그대로
 
 // ----- 화면에 그릴 줄 -----
 const slotName = s => (s.key === "weapon" ? "무기 악세" : s.name);   // 무기 아바타·무기 종류와 헷갈리지 않게
-// 줄 하나: [묶음, 부위, 이름]. 묶음 wear 는 한 벌·5셋(레어 아바타 다섯 부위)·무기 아바타, town 은 마을 버프
+// 줄 하나: [묶음, 부위, 이름]. 묶음 wear 는 한 벌·5셋(레어 아바타 다섯 부위)·무기 아바타, town 은 마을 버프, spirit 은 아티팩트 정령석
 const TABLES = [
-  { title: "무기 · 마을 버프", rows: [["weapon", "weapon", "무기 종류"], ["town", "town", "마을 버프"]] },
+  { title: "무기 · 마을 버프 · 정령석", rows: [["weapon", "weapon", "무기 종류"], ["town", "town", "마을 버프"], ["spirit", "spirit", "아티팩트 정령석"]] },
   { title: "아바타 악세", rows: [["wear", "outfit", "한 벌"], ["wear", "set5", "5셋"], ["wear", "wavatar", "무기 아바타"], ...ACC_SLOTS.map(s => ["avatar", s.key, slotName(s)])] },
   { title: "일반 악세", atma: true, rows: ACC_SLOTS.filter(s => s.key !== "ring").map(s => ["normal", s.key, slotName(s)]).concat([["normal", "ring", "반지 1"], ["normal", "ring2", "반지 2"]]) },
 ];
 const ROWS = TABLES.flatMap(t => t.rows);
 /** 줄의 "고정" 이름 (자동 찾기의 LOCKABLE 과 같은 이름). 무기 종류는 늘 그대로라 없다 */
-const lockKey = (group, slot) => group === "weapon" ? null : group === "town" ? "town" : group === "wear" ? (slot === "set5" ? "armor" : slot) : `${group}.${slot}`;
+const lockKey = (group, slot) => group === "weapon" ? null : group === "town" || group === "spirit" ? group : group === "wear" ? (slot === "set5" ? "armor" : slot) : `${group}.${slot}`;
 /**
  * 처음 쓸 때 "고정"에 체크해 두는 칸. 일반 악세는 레이드 세트·아트마로 거의 정해져 있어서 하의만 바꿔 본다
  * (아바타 악세로 DPS를 올리다 적응력이 모자라면 족쇄 -> 글로잉 플라워, 넘치면 그 반대로 바꾸는 경우가 대부분이라)
@@ -52,6 +52,7 @@ function shortName(name) {
 function choices(group, slot) {
   if (group === "weapon") return WEAPONS.map(w => [w.name, w.set ? `${w.name} (${w.set})` : w.name]);
   if (group === "town") return Object.keys(TOWN_BUFFS).map(n => [n, n]);
+  if (group === "spirit") return SPIRIT_CHOICES;
   let list;
   if (group === "avatar" || group === "normal") {
     const s = slot === "ring2" ? "ring" : slot, items = ALL_ACC.filter(a => a.layer === group && a.slot === s);
@@ -64,6 +65,9 @@ function choices(group, slot) {
   else list = Object.keys(ARMOR_AVATARS).map(n => [n, n]);
   return list.reverse();
 }
+
+/** 아티팩트 정령석: 값 = 양극화로 고른 개수 */
+const SPIRIT_CHOICES = [["0", "물마 2% ×2"], ["1", "물마 2% + 양극화 2%"], ["2", "양극화 2% ×2"]];
 
 const sel = (side, group, slot) => $(`gear-${side}-${group}-${slot}`);
 const options = (list, first) => first.concat(list).map(([v, t]) => `<option value="${esc(v)}">${esc(t)}</option>`).join("");
@@ -87,14 +91,16 @@ function buildTables() {
           `<td class="next"><div class="pick"><select id="gear-next-town-town" aria-label="바꿔 볼 마을 버프">${options(list, [[SAME, "그대로"]])}</select></div></td>${lockCell("town", name)}</tr>`;
         continue;
       }
-      const none = group === "weapon" ? "그 밖의 무기" : "미착용";
+      const none = group === "weapon" ? "그 밖의 무기" : group === "spirit" ? "입력 안 함" : "미착용";
+      const nextFirst = group === "spirit" ? [[SAME, "그대로"]] : [[SAME, "그대로"], ["", none]];   // 정령석은 빼는 경우가 없다
       html += `<tr><td class="lbl">${name}</td>` +
         `<td><div class="pick"><select id="gear-now-${group}-${slot}" aria-label="지금 ${table.title} ${name}">${options(list, [["", none]])}</select>${gradeSel("now")}</div></td>` +
-        `<td class="next"><div class="pick"><select id="gear-next-${group}-${slot}" aria-label="바꿔 볼 ${table.title} ${name}">${options(list, [[SAME, "그대로"], ["", none]])}</select>${gradeSel("next")}</div></td>${lockCell(lockKey(group, slot), `${table.title} ${name}`)}</tr>`;
+        `<td class="next"><div class="pick"><select id="gear-next-${group}-${slot}" aria-label="바꿔 볼 ${table.title} ${name}">${options(list, nextFirst)}</select>${gradeSel("next")}</div></td>${lockCell(lockKey(group, slot), `${table.title} ${name}`)}</tr>`;
     }
     html += `</tbody></table></div>`;
-    if (table.title === "무기 · 마을 버프") html += `<p class="hint">레이드 무기는 같은 레이드 악세 세트 개수에 들어가요 (사룡무 → 공중요새의 유산, 암귀무 → 심연 레이드 세트). 스크린샷으로는 채우지 않으니 직접 골라 주세요. 자동 찾기에서도 무기 종류는 그대로 둬요.</p>` +
-      `<p class="hint">마을 버프 "지금"은 스펙 계산에서 고른 버프예요. 바꿔 보기에서 다른 버프를 고르면 그 버프로 계산해요 (적응력은 60% 상한에 같이 들어가요). 자동 찾기는 "고정"이 아니면 버프마다 따로 찾아서 비교해요.</p>`;
+    if (table.rows.some(r => r[0] === "town")) html += `<p class="hint">레이드 무기는 같은 레이드 악세 세트 개수에 들어가요 (사룡무 → 공중요새의 유산, 암귀무 → 심연 레이드 세트). 스크린샷으로는 채우지 않으니 직접 골라 주세요. 자동 찾기에서도 무기 종류는 그대로 둬요.</p>` +
+      `<p class="hint">마을 버프 "지금"은 스펙 계산에서 고른 버프예요. 바꿔 보기에서 다른 버프를 고르면 그 버프로 계산해요 (적응력은 60% 상한에 같이 들어가요). 자동 찾기는 "고정"이 아니면 버프마다 따로 찾아서 비교해요.</p>` +
+      `<p class="hint">아티팩트 정령석은 두 개를 각각 물마(물리·마법 공격력) 2% 또는 양극화 2%로 바꿀 수 있어요. 지금 낀 것을 골라 두면 자동 찾기가 같이 골라 줘요 (양극화가 60%를 넘으면 물마로 바꾸는 식). "입력 안 함"이면 계산에서 빼요.</p>`;
     if (table.title === "아바타 악세") html += `<p class="hint">5셋은 레어 아바타 헤어·상의·하의·장갑·신발을 한 세트로 맞춰 입은 것이에요.</p>`;
   }
   $("gear-tables").innerHTML = html;
@@ -116,6 +122,7 @@ function readGear(side) {
       continue;
     }
     const v = val(group, slot) || null;
+    if (group === "spirit") { g.spirit = v == null ? null : +v; continue; }
     if (group === "weapon") g.weapon = v;
     else if (group === "wear") {
       if (slot === "outfit") g.outfit = v;
@@ -153,6 +160,7 @@ function fillNext(g) {
   for (const [group, slot] of ROWS) {
     if (group === "weapon") continue;
     if (group === "town") { sel("next", "town", "town").value = g.town || SAME; continue; }
+    if (group === "spirit") { sel("next", "spirit", "spirit").value = g.spirit == null || g.spirit === now.spirit ? SAME : String(g.spirit); continue; }
     const want = (group === "wear" ? wear(g, slot) : g[group][slot]) || null;
     const cur = (group === "wear" ? wear(now, slot) : now[group][slot]) || null;
     const e = sel("next", group, slot);
@@ -458,8 +466,11 @@ export function initGear(onChange) {
       // 스탯창에는 지금 낀 장비 효과가 이미 들어 있어서, 지금 세팅이 비어 있으면 변화가 실제보다 크게 나온다
       const worn = Object.values(now.avatar).concat(Object.values(now.normal)).filter(Boolean).length;
       const cdrText = x => target != null ? ` 초월 쿨감 ${trimPct(ctx.win.cdr_cho)} → ${trimPct(x.cdr)} (목표 ${trimPct(target)}${x.cdrMet ? "" : ", 목표를 맞출 수 있는 조합이 없어서 가장 가깝게 맞췄어요"}).` : "";
-      const head = best.gain > 1e-9
-        ? `가장 좋은 조합을 "바꿔 보기"에 채웠어요${towns.length > 1 ? ` (마을 버프: ${best.town})` : ""}. 지금보다 DPS ${signed(best.gain)} · 세트 조합 ${plans.toLocaleString("ko-KR")}가지를 따져 봤어요 (${sec}초).`
+      // 점수 = DPS 변화 - 상한 초과 몫. 지금 세팅의 점수보다 높으면 바꾼 것이다 (DPS를 조금 손해 보고 초과를 줄인 경우도 있다)
+      const better = best.score > -OVER_PENALTY * best.overNow + 1e-9;
+      const overText = Math.abs(best.over - best.overNow) > 5e-5 ? ` 상한 초과 합 ${trimPct(best.overNow)}p → ${trimPct(best.over)}p.` : "";
+      const head = better
+        ? `가장 좋은 조합을 "바꿔 보기"에 채웠어요${towns.length > 1 ? ` (마을 버프: ${best.town})` : ""}. 지금보다 DPS ${signed(best.gain)}${best.gain < -1e-9 ? " (상한 초과를 줄이느라 조금 낮아졌어요)" : ""}.${overText} 세트 조합 ${plans.toLocaleString("ko-KR")}가지를 따져 봤어요 (${sec}초).`
         : "지금 세팅이 이미 가장 좋아요.";
       let html = `<span>${esc(head + cdrText(best) + (worn < 12 ? " 지금 세팅 칸이 많이 비어 있어서 변화가 실제보다 크게 나올 수 있어요. 지금 낀 것을 먼저 채워 주세요." : ""))}</span>`;
       if (byTown.length > 1) {
