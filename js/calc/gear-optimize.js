@@ -284,7 +284,7 @@ function searchOne(ctx, now, start, { locked = [], cdrTarget = null, plans: keep
       evals++;
       const r = scorer.evaluate(g), cdr = r.shifted.win.cdr_cho;
       const short = useCdr ? Math.max(0, cdrTarget - cdr) : 0;
-      j = { dps: r.value, cdr, short: short > 1e-9 ? short : 0, over: overTotal(r.shifted.win, r.setup, ctx.job, ctx.resist) };
+      j = { dps: r.value, cdr, short: short > 1e-9 ? short : 0, over: overTotal(r.real, r.setup, ctx.job, ctx.resist) };
       memo.set(key, j);
     }
     return j;

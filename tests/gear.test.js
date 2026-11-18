@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { compareGear, gearEffects, atmaSet, emptyGear } from "../js/calc/gear.js";
+import { compareGear, gearEffects, atmaSet, emptyGear, gearScorer } from "../js/calc/gear.js";
 import { resolve, dpsIndex } from "../js/calc/stats.js";
 import { applyOption } from "../js/calc/compare.js";
 import { near, PICARO } from "./helpers.js";
@@ -87,4 +87,19 @@ test("세트: 사룡무는 공중요새의 유산 개수에 들어간다", () =>
   const swap = w => compareGear(ctx, gear({ normal, weapon: w }), gear({ normal: { ...normal, bottom: "글로잉 플라워" }, weapon: w }));
   assert.equal(swap("사룡무").delta.polar, undefined);
   near(swap(null).delta.polar, -0.05, 10);
+});
+
+test("크리·극대 소켓 기준: 소켓(6%)을 바꿔 이득일 때만 크리·극대 변화를 센다", () => {
+  const scorer = gearScorer, compare = compareGear, empty = emptyGear;
+  const exact = { win: PICARO.win, job: PICARO.job, resist: PICARO.resist, setup: PICARO.setup };
+  const ctx = { ...exact, sockets: { partners: [{ name: "사냥석 보뎀 2.5%", stats: { boss: 0.025 } }] } };
+  const val = (c, v) => scorer(c, empty()).valueOf({ visible: v, cdMults: [], finals: [] }, null) - 1;
+  const boss = PICARO.win.boss + PICARO.setup.guild_boss + PICARO.job.boss;
+  assert.ok(val(exact, { crit: 0.02 }) > 0);                       // 그대로 계산하면 크리 2%도 DPS가 오른다
+  assert.equal(val(ctx, { crit: 0.02 }), 0);                        // 크리 6% 한 칸을 사냥석으로 바꿔도 손해 -> 없는 것으로
+  assert.ok(Math.abs(val(ctx, { crit: 0.06 }) - ((1 + boss + 0.025) / (1 + boss) - 1)) < 1e-12);   // 크리 6% -> 사냥석 2.5%로 바꾼 값
+  assert.ok(val(ctx, { crit: -0.02 }) >= val(exact, { crit: -0.02 }) - 1e-12);   // 줄면 크리를 더 끼우는 쪽이 나으면 그 값
+  const r = compare(ctx, empty(), Object.assign(empty(), { avatar: { top: "비룡승운 : 호걸의 긍지" } }));
+  assert.deepEqual(r.dropped, ["crit"]); assert.deepEqual(r.swaps, []);
+  assert.ok(Math.abs(r.win.crit - compare(exact, empty(), Object.assign(empty(), { avatar: { top: "비룡승운 : 호걸의 긍지" } })).win.crit) < 1e-12);   // 스탯창에는 오른 크리 그대로
 });
