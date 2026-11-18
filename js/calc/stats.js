@@ -115,7 +115,11 @@ export function resolve(win, job, critResist, setup) {
     s.enc_uptime = setup.enc_uptime;
   }
   // 크뎀: 기본 크뎀 150%에 곱연산되는 항목은 150% x (곱 - 1) 만큼의 크뎀으로 환산해서 더한다
-  if (has(s, "crit_dmg")) s.crit_dmg = (s.crit_dmg + c.cd_s + 1.5 * (prod(setup.cd_base_mults.concat([c.cd_base])) - 1)) * (1 + c.cd_final);
+  if (has(s, "crit_dmg")) {
+    s.cd_base_prod = prod(setup.cd_base_mults.concat([c.cd_base]));   // 기본 크뎀 150%에 곱하는 배율 (옵션 비교의 곱연 크뎀에 쓴다)
+    s.cd_final_mult = 1 + c.cd_final;                                   // 크리 시 피해 배율
+    s.crit_dmg = (s.crit_dmg + c.cd_s + 1.5 * (s.cd_base_prod - 1)) * s.cd_final_mult;
+  }
   if (has(s, "maxi")) {
     s.maxi = maxiFromStat(statFromMaxi(s.maxi) + setup.town_maxi + c.maxi_s);
     s.maxi_mults = setup.maxi_mults.concat([c.maxi_m]);
@@ -137,7 +141,7 @@ export function resolve(win, job, critResist, setup) {
  */
 export function dpsIndex(s) {
   let x = 1;
-  for (const k of ["atk_pct", "all_skill", "boss", "add", "hp100"]) x *= 1 + (s[k] || 0);
+  for (const k of ["atk_pct", "all_skill", "boss", "add", "hp100", "final"]) x *= 1 + (s[k] || 0);   // final: 옵션 비교의 최종 데미지 (스탯창에는 없다)
   x *= 1 + Math.min(s.polar || 0, POLAR_CAP);
   if (has(s, "cho") || has(s, "gang")) {
     const g = s.gang || 0, c = s.cho || 0;

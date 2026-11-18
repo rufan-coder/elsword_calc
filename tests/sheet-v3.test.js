@@ -75,3 +75,25 @@ test("던전·세트: 새 던전이 있고, 엠파이어 레인 무악 3셋의 �
   assert.ok(DUNGEONS["네블론 레이드"] && DUNGEONS["크리저항 없는 던전"]);   // 저장값이 가리키는 예전 이름은 그대로
   assert.deepEqual(SETS["엠파이어 레인 무악"].stages[3], { all_skill: 0.08 });
 });
+
+test("옵션 비교: 시트 ver.3.0.19 Main '옵션 효율표'(각 1%)와 같다", async () => {
+  const { compare } = await import("../js/calc/compare.js");
+  const { statAtkPct } = await import("../js/calc/stats.js");
+  // 시트 Main 예시 (페이탈 팬텀 체인지, 엘 하우스(강화), 네블론). 강렬 점유율 15%는 스뎀 적용 전 기준이라 화면이 받는 '보이는 비중'으로 바꿔 넣는다
+  const seenCho = 0.85 * 2.33 / (0.85 * 2.33 + 0.15 * 2.03);
+  const win = { crit: 0.864, crit_dmg: 1.915, maxi: 0.6588, A: 170165, A_max: 233065, W: 56380.4, boss: 2.087, all_skill: 1.18, cho: 1.33, gang: 1.03,
+    share_cho: seenCho * 100, share_gang: (1 - seenCho) * 100, polar: 0.6, add: 1.027, hp_over: 0.45, hp_under: 0.45, hp100: 0.485, adapt: 0.6, super_adapt: 0.21 };   // 초적응력: 스탯창 18% + 시트가 따로 더하는 3% (C471)
+  win.atk_pct = statAtkPct(win.A, win.A_max, win.W);
+  const setup = { town_crit: 0.05, town_maxi: 0.05, town_boss: 0.02, town_adapt: 0, crit_mults: [0.13, 0.08], maxi_mults: [0.13, 0.08], cd_base_mults: [0.10, 0.010625], guild_boss: 0.025, enc_uptime: 36 / 66, debuff: 0.95 };
+  const base = resolve(win, withClassSkill("페이탈 팬텀", "체인지"), 0.30, setup);
+  const sheet = {   // 시트 O9:O28 (1% 올렸을 때 DPS 상승량)
+    super_adapt: 0.011627906977, cd_mult: 0.007967963489, hp100: 0.006734006734, add: 0.004933399112, atk_pct: 0.004929923688,
+    crit_dmg: 0.004778299351, all_skill: 0.004587155963, cho: 0.003719912473, hp_over: 0.003448275862, hp_under: 0.003448275862,
+    boss: 0.00319284802, crit: 0.001159546012, gang: 0.000656455142, maxi: 6.3555804e-05, polar: 0, adapt: 0,
+  };
+  const rows = compare(base, Object.keys(sheet).map(kind => ({ name: kind, kind, value: 0.01 })));
+  for (const r of rows) {
+    assert.equal(typeof r.gain, "number", r.kind);
+    assert.ok(Math.abs(r.gain - sheet[r.kind]) < 1e-9 + 1e-6 * sheet[r.kind], `${r.kind}: ${r.gain} vs ${sheet[r.kind]}`);
+  }
+});

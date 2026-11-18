@@ -8,6 +8,7 @@ import { compareGear, emptyGear, STAT_NAMES, IGNORED } from "../calc/gear.js";
 import { optimizeGear, townsToTry, sortByTown, OVER_PENALTY } from "../calc/gear-optimize.js";
 import { TOWN_BUFFS } from "../data/buffs.js";
 import { capOver, CAP_NOTES } from "../calc/caps.js";
+import { SWAP_STONES } from "../data/stones.js";
 import { findCharWindow, equipCells } from "../ocr/equip-window.js";
 import { matchCell, isEmptySlot, decodeFeature, encodeFeature, featureDistance, KEEP_BACKGROUND, MAX_DISTANCE } from "../ocr/icons.js";
 
@@ -207,17 +208,14 @@ function cdrTarget(win) {
 /** 초월 쿨감이 목표보다 낮으면 빨간 글씨 "목표보다 2% 낮음" */
 const shortSpan = (cdr, target) => target != null && cdr < target - 1e-9 ? `<span class="over" title="초월 쿨감 목표 ${trimPct(target)}">목표보다 ${trimPct(target - cdr)} 낮음</span>` : "";
 
-/**
- * 크리·극대 소켓 기준: 켜져 있으면 크리·극대 마법석 대신 끼울 마법석 목록 (스펙 계산의 크극 최적화·소켓 최적화 설정을 쓴다)
- *   보뎀: 크극 최적화 탭의 "보뎀 기준" (사냥석 2.5% / 힘트마 3%), 지트마 초스뎀: 소켓 최적화의 한 칸 수치 (아트마 마법석을 쓸 때만)
- */
+/** 크리·극대 소켓 기준: 켜져 있으면 크리·극대 마법석 대신 끼울 마법석 ("소켓 교체 기준"에서 고른 것) */
 function socketRule() {
   if (!$("gear-ckb-sockets").checked) return null;
-  const boss = (parseFloat($("ckb_boss").value) || 2.5) / 100, cho = (parseFloat($("sk_per_cho").value) || 0) / 100;
-  const partners = [{ name: `${boss >= 0.03 ? "힘트마" : "사냥석"} 보뎀 ${trimPct(boss)}`, stats: { boss } }];
-  if ($("sk_atma").value === "1" && cho > 0) partners.push({ name: `지트마 초스뎀 ${trimPct(cho)}`, stats: { cho } });
-  return { partners };
+  const stone = SWAP_STONES.find(x => x.key === $("gear-socket-stone").value) || SWAP_STONES[0];
+  return { partners: [{ name: stone.name, stats: stone.stats }] };
 }
+/** 소켓 교체 추천을 교체 결과 스탯창에 반영할지 */
+let applySockets = false;
 const SOCKET_STAT = { crit: "크리", maxi: "극대" };
 
 export function renderGear({ win, job, resist, setup, town }) {
@@ -240,6 +238,15 @@ export function renderGear({ win, job, resist, setup, town }) {
   float.innerHTML = `<span>DPS 변화</span><b class="${r.gain > 1e-9 ? "up" : r.gain < -1e-9 ? "down" : ""}">${signed(r.gain)}</b><a href="#gear-results">자세히</a>`;
   let html = `<div class="gear-gain ${r.gain > 1e-9 ? "up" : r.gain < -1e-9 ? "down" : ""}"><span class="v">${changed ? signed(r.gain) : "±0%"}</span><span class="k">DPS 변화 (지금 세팅 대비)</span></div>`;
   if (!changed) html += `<p class="hint">"바꿔 보기"에서 부위를 골라 보세요. 세트 효과가 켜지고 꺼지는 것까지 함께 계산해요.</p>`;
+
+  // 소켓 교체 추천 (크리·극대 소켓 기준으로 계산에 넣은 교체)
+  const swaps = r.swaps || [];
+  if (swaps.length) {
+    const by = new Map();
+    for (const x of swaps) { const key = x.dir < 0 ? `${SOCKET_STAT[x.k]} 6% → ${x.name}` : `${x.name} → ${SOCKET_STAT[x.k]} 6%`; by.set(key, (by.get(key) || 0) + 1); }
+    html += `<div class="socket-rec"><div class="k">소켓 교체 추천 · 위 DPS 변화에 들어 있어요</div><ul>${[...by].map(([t, n]) => `<li>${esc(t)} <b>${n}칸</b></li>`).join("")}</ul>` +
+      `<label><input type="checkbox" id="gear-apply-sockets"${applySockets ? " checked" : ""}> 아래 스탯창(바꾼 뒤)에 소켓 교체 반영</label></div>`;
+  }
 
   // 세트 효과
   const names = [...new Set([...r.before.sets, ...r.after.sets].map(s => s.name))];
@@ -268,7 +275,7 @@ export function renderGear({ win, job, resist, setup, town }) {
   }
 
   // 스탯창 전체: 지금 -> 바꾼 뒤 (바뀐 줄은 굵게)
-  const after = r.win, stat = x => (x * 100).toFixed(2) + "%";
+  const after = applySockets && swaps.length && r.real ? r.real : r.win, stat = x => (x * 100).toFixed(2) + "%";
   const overNow = capOver(win, setup, job, resist), overAfter = capOver(after, r.setup, job, resist), target = cdrTarget(win);
   const mark = (w, over, k) => overSpan(over, k) + (k === "crit" || k === "maxi" ? overSpan(over, k + "_sat") : "") + (k === "cdr_cho" ? shortSpan(w[k], target) : "");
   const lines = WINDOW_STATS.filter(([k]) => typeof win[k] === "number").map(([k, name]) => {
@@ -293,11 +300,7 @@ export function renderGear({ win, job, resist, setup, town }) {
   if (ign.length) notes.push(`계산에 넣지 않은 옵션: ${ign.map(([k, v]) => `${IGNORED[k]} ${pctText(v)}`).join(", ")}`);
   const unknown = [...new Set([...r.before.unknown, ...r.after.unknown])];
   if (unknown.length) notes.push(`수치를 모르는 아이템은 효과가 없는 것으로 계산했어요: ${unknown.join(", ")}`);
-  if (r.swaps && r.swaps.length) {
-    const by = new Map();
-    for (const x of r.swaps) { const key = x.dir < 0 ? `${SOCKET_STAT[x.k]} 6% → ${x.name}` : `${x.name} → ${SOCKET_STAT[x.k]} 6%`; by.set(key, (by.get(key) || 0) + 1); }
-    notes.push(`소켓 교체까지 계산했어요: ${[...by].map(([t, n]) => `${t} (${n}칸)`).join(", ")}. 이 조합으로 바꾸면 소켓도 이렇게 바꿔 주세요.`);
-  }
+  if (swaps.length && applySockets) notes.push("스탯창의 \"바꾼 뒤\"는 소켓 교체 추천까지 반영한 값이에요.");
   if (r.dropped && r.dropped.length) notes.push(`장비로 바뀐 ${r.dropped.map(k => `${SOCKET_STAT[k]} ${pctText(r.delta[k] || 0)}`).join(", ")}는 소켓(6%)을 바꿔도 이득이 없어서 DPS에서 뺐어요 (스탯창 표에는 그대로 보여요).`);
   if ([r.before.atma, r.after.atma].some(a => a.grade && !a.active)) notes.push("이 속성의 아트마 세트 효과는 데이터에 없어서 계산하지 않았어요.");
   if (["now", "next"].some(side => { const g = readGear(side); return g.normal.ring && g.normal.ring === g.normal.ring2; })) notes.push("같은 반지는 두 개 낄 수 없어요. 반지 1과 반지 2를 다르게 골라 주세요.");
@@ -313,7 +316,7 @@ function allSelects() { return [...document.querySelectorAll("#gear-tables selec
 const DEFAULT_WEAPON = "사룡무";
 
 function saveGear() {
-  const s = { v: 2, sel: Object.fromEntries(allSelects().map(e => [e.id, e.value])), avatarSets: nowAvatarSets, locks: readLocks(), lockVersion: LOCK_VERSION, cdrTarget: $("gear-cdr-target").value, ckbSockets: $("gear-ckb-sockets").checked };
+  const s = { v: 2, sel: Object.fromEntries(allSelects().map(e => [e.id, e.value])), avatarSets: nowAvatarSets, locks: readLocks(), lockVersion: LOCK_VERSION, cdrTarget: $("gear-cdr-target").value, ckbSockets: $("gear-ckb-sockets").checked, socketStone: $("gear-socket-stone").value, applySockets };
   try { localStorage.setItem(KEY, JSON.stringify(s)); } catch (e) { /* 저장이 막힌 환경 */ }
 }
 /** 기본 고정: 일반 악세 쪽은 DEFAULT_LOCKS 대로, 아바타 쪽은 keep 에 있는 것만 */
@@ -338,6 +341,8 @@ function loadGear() {
     }
     if (typeof s.cdrTarget === "string") $("gear-cdr-target").value = s.cdrTarget;
     if (typeof s.ckbSockets === "boolean") $("gear-ckb-sockets").checked = s.ckbSockets;
+    if (SWAP_STONES.some(x => x.key === s.socketStone)) $("gear-socket-stone").value = s.socketStone;
+    applySockets = s.applySockets === true;
   } catch (e) { /* 못 읽으면 처음 상태로 */ }
 }
 
@@ -443,6 +448,7 @@ async function fillFromShot(file, onChange) {
 // ----- 시작 -----
 export function initGear(onChange) {
   buildTables();
+  $("gear-socket-stone").innerHTML = SWAP_STONES.map(x => `<option value="${x.key}">${esc(x.name)}</option>`).join("");
   $("gear-now-weapon-weapon").value = DEFAULT_WEAPON;
   loadGear();
   const tables = $("gear-tables");
@@ -454,7 +460,9 @@ export function initGear(onChange) {
     }
     saveGear();
   });
-  $("gear-out").addEventListener("change", e => {
+  // 결과 칸의 체크박스는 "input"에서 받는다: 화면 전체가 input 때 다시 그려져서, change 때는 이미 지워진 칸이라 여기까지 오지 않는다
+  $("gear-out").addEventListener("input", e => {
+    if (e.target.id === "gear-apply-sockets") { applySockets = e.target.checked; saveGear(); onChange(); return; }
     if (!e.target.closest("#gear-avatar-sets")) return;
     const boxes = [...document.querySelectorAll("#gear-avatar-sets input")];
     let on = boxes.filter(b => b.checked).map(b => b.value);
@@ -513,6 +521,7 @@ export function initGear(onChange) {
   });
   $("gear-cdr-target").addEventListener("input", saveGear);
   $("gear-ckb-sockets").addEventListener("change", () => { saveGear(); onChange(); });
+  $("gear-socket-stone").addEventListener("change", () => { saveGear(); onChange(); });
   $("gear-reset-next").addEventListener("click", () => {
     for (const e of allSelects()) if (e.id.startsWith("gear-next-")) e.value = SAME;
     saveGear(); onChange();

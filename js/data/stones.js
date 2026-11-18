@@ -20,3 +20,14 @@ export const SLOT_BASE = 38;
 
 /** 크리·극대 마법석 한 칸 수치. 크극 최적화에서 보뎀 한 칸과 맞바꾸는 기준 */
 export const CRIT_MAXI_PER_SLOT = 0.06;
+
+/** 악세 세팅의 "소켓 교체 기준": 크리·극대 마법석(6%) 한 칸 대신 끼워 볼 마법석. 처음 고른 값은 사냥석 */
+const per = key => STONES.find(s => s.key === key).percent / 100;
+export const SWAP_STONES = [
+  { key: "boss2", name: `사냥석 (보뎀 ${per("boss2") * 100}%)`, stats: { boss: per("boss2") } },
+  { key: "boss", name: `힘트마 (보뎀 ${per("boss") * 100}%)`, stats: { boss: per("boss") } },
+  { key: "cho", name: `지트마 (초스뎀 ${per("cho") * 100}%)`, stats: { cho: per("cho") } },
+  { key: "gang", name: `강렬스뎀 ${per("gang") * 100}%`, stats: { gang: per("gang") } },
+  { key: "all", name: `모스뎀 ${per("all") * 100}%`, stats: { all_skill: per("all") } },
+  { key: "both", name: `유강강초 ${per("both") * 100}%`, stats: { gang: per("both"), cho: per("both") } },
+];

@@ -18,14 +18,19 @@ export const OPTION_KINDS = {
   all_skill: { label: "모든 스킬 데미지", delta: v => ({ all_skill: v }), needs: "all_skill" },
   crit: { label: "크리티컬 확률", delta: v => ({ crit_stat: v }), needs: "crit" },
   maxi: { label: "극대화", delta: v => ({ maxi_stat: v }), needs: "maxi" },
+  crit_maxi: { label: "크리티컬 + 극대화", delta: v => ({ crit_stat: v, maxi_stat: v }), needs: "crit_maxi" },
   crit_dmg: { label: "크리티컬 데미지", delta: v => ({ crit_dmg: v }), needs: "crit" },
+  cd_mult: { label: "크리티컬 데미지 (기본 크뎀 곱연산)", delta: v => ({ cd_mult: v }), needs: "crit" },
+  crit_hit: { label: "크리티컬 피해 (크리 시 최종뎀)", delta: v => ({ crit_hit: v }), needs: "crit" },
   polar: { label: "양극화", delta: v => ({ polar: v }), needs: "polar" },
   add: { label: "추가 피해", delta: v => ({ add: v }), needs: "add" },
   hp_over: { label: "HP 50% 초과 적 데미지", delta: v => ({ hp_over: v }), needs: "hp_over" },
   hp_under: { label: "HP 50% 이하 적 데미지", delta: v => ({ hp_under: v }), needs: "hp_under" },
+  hp_both: { label: "HP 50% 초과 + 이하 적 데미지", delta: v => ({ hp_over: v, hp_under: v }), needs: "hp_both" },
   hp100: { label: "HP 100% 이하 적 데미지", delta: v => ({ hp100: v }), needs: "hp100" },
   adapt: { label: "적응력", delta: v => ({ adapt: v }), needs: "adapt" },
   super_adapt: { label: "초적응력", delta: v => ({ super_adapt: v }), needs: "adapt" },
+  final: { label: "최종 데미지", delta: v => ({ final: v }), needs: null },
   // 스킬 재사용 시간 감소는 DPS에 넣지 않아서 비교할 옵션에도 없다
 };
 
@@ -38,6 +43,10 @@ export function applyOption(base, delta) {
   for (const [k, v] of Object.entries(delta)) {
     if (k === "crit_stat") s.crit = critFromStat(statFromCrit(s.crit) + v);
     else if (k === "maxi_stat") s.maxi = maxiFromStat(statFromMaxi(s.maxi) + v);
+    // 곱연 크뎀: 기본 크뎀 150%에 곱하는 배율이 (1+v)배가 된다. 크리 시 피해·최종 데미지는 다른 출처와 곱한다
+    else if (k === "cd_mult") { s.crit_dmg += 1.5 * (s.cd_base_prod || 1) * v * (s.cd_final_mult || 1); s.cd_base_prod = (s.cd_base_prod || 1) * (1 + v); }
+    else if (k === "crit_hit") { s.crit_dmg *= 1 + v; s.cd_final_mult = (s.cd_final_mult || 1) * (1 + v); }
+    else if (k === "final") s.final = (1 + (s.final || 0)) * (1 + v) - 1;
     else s[k] = (s[k] || 0) + v;
   }
   return s;
@@ -45,7 +54,10 @@ export function applyOption(base, delta) {
 
 /** 계산에 필요한 입력이 비어 있으면 무엇이 비었는지 문구로 돌려준다. 다 있으면 null */
 function missingFor(needs, s) {
+  if (!needs) return null;
   if (needs === "crit") return hasCrit(s) ? null : "크리티컬 확률과 크리티컬 데미지";
+  if (needs === "crit_maxi") return hasCrit(s) && hasMaxi(s) ? null : "크리티컬 확률·데미지, 극대화, 공격력, 최댓값";
+  if (needs === "hp_both") return has(s, "hp_over") && has(s, "hp_under") ? null : "HP 50% 초과·이하 적 데미지";
   if (needs === "maxi") return hasMaxi(s) ? null : "극대화, 공격력, 최댓값";
   if (needs === "atk_pct") return has(s, "atk_pct") ? null : "공격력, 최댓값, 무기 공격력";
   if (needs === "skill") return (has(s, "cho") || has(s, "gang")) ? null : "초월·강렬 스킬 데미지";

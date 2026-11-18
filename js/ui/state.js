@@ -28,8 +28,16 @@ export const DEFAULTS = {
   ckb_boss: "2.5", ckb_min: 25, sk_neb: "0", sk_slots: SLOT_BASE, sk_boss_target: "boss", sk_atma: "1",   // 힘트마 기준이면 아트마 사용은 O로 고정
   ...Object.fromEntries(STONES.map(s => ["sk_per_" + s.key, s.percent])),
   sk_cnt_crit: 12, sk_cnt_maxi: 8, sk_cnt_boss: 4, sk_cnt_boss2: 4, sk_cnt_cho: 10,
-  opts: [["힘트마", "boss", 6, ""], ["지트마", "cho", 5, ""], ["사냥석", "boss", 5, ""], ["기민석", "both", 4, ""], ["크리 마법석", "crit", 6, ""], ["극대 마법석", "maxi", 6, ""]],
+  // 옵션 비교 기본 목록: 자주 쓰는 마법석 + 시트 Main '옵션 효율표'처럼 스탯마다 1%
+  opts: [["힘트마", "boss", 6, ""], ["지트마", "cho", 5, ""], ["사냥석", "boss", 5, ""], ["기민석", "both", 4, ""], ["크리 마법석", "crit", 6, ""], ["극대 마법석", "maxi", 6, ""],
+    ["보뎀 1%", "boss", 1, ""], ["모스뎀 1%", "all_skill", 1, ""], ["초스뎀 1%", "cho", 1, ""], ["강렬스뎀 1%", "gang", 1, ""], ["공격력 1%", "atk_pct", 1, ""],
+    ["크뎀 1%", "crit_dmg", 1, ""], ["곱연 크뎀 1%", "cd_mult", 1, ""], ["크리 1%", "crit", 1, ""], ["극대 1%", "maxi", 1, ""], ["추피 1%", "add", 1, ""],
+    ["양극화 1%", "polar", 1, ""], ["HP 100% 이하 1%", "hp100", 1, ""], ["HP 50% 초과 1%", "hp_over", 1, ""], ["HP 50% 이하 1%", "hp_under", 1, ""],
+    ["적응력 1%", "adapt", 1, ""], ["초적응력 1%", "super_adapt", 1, ""]],
 };
+/** 예전 기본 옵션 목록 (그대로 저장돼 있으면 새 기본 목록으로 바꾼다) */
+const OLD_DEFAULT_OPTS = [["힘트마", "boss", 6, ""], ["지트마", "cho", 5, ""], ["사냥석", "boss", 5, ""], ["기민석", "both", 4, ""], ["크리 마법석", "crit", 6, ""], ["극대 마법석", "maxi", 6, ""]];
+const optsKey = rows => JSON.stringify(rows.map(r => [r[0], r[1], String(r[2]), String(r[3] == null ? "" : r[3])]));
 
 /**
  * 고른 전직에 선택 스킬이 있으면 선택지를 채워서 보여 주고, 없으면 숨긴다.
@@ -80,6 +88,7 @@ export function readSaved() {
     if (!("sk_cnt_crit" in saved)) for (const s of STONES) saved["sk_cnt_" + s.key] = "";   // 칸 수 대신 수치 합을 받던 때
     if (!("adapt" in saved)) for (const id of ["adapt", "super_adapt", "cdr_gang", "cdr_cho"]) saved[id] = "";   // 적응력·쿨감 칸이 없던 때 (예시 값이 섞이지 않게 비움)
     if (saved.town != null && !TOWN_BUFFS[saved.town]) saved.town = DEFAULTS.town;   // 목록에서 빠진 버프 (공존의 축제 등)
+    if (optsKey(saved.opts) === optsKey(OLD_DEFAULT_OPTS)) saved.opts = DEFAULTS.opts;   // 옵션 비교 기본 목록을 늘리기 전 그대로면 새 목록으로
     return Object.assign({}, DEFAULTS, saved);
   } catch (e) { return null; }
 }

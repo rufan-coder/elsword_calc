@@ -318,6 +318,7 @@ export function compareGear(ctx, beforeGear, afterGear) {
     blank: after.shifted.blank,
     win: after.shifted.win,   // 바꾼 뒤 스탯창 (장비만. 크리·극대 소켓 기준이면 swaps 의 소켓 교체는 따로)
     swaps: after.swaps, dropped: after.dropped,
+    real: after.real,         // 소켓 교체까지 한 스탯창 (크리·극대 소켓 기준을 켰을 때)
     setup: after.setup,       // 바꾼 뒤 버프 (마을 버프를 바꿨으면 그 버프)
   };
 }
