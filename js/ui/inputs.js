@@ -4,7 +4,7 @@ import { $, num, pct, pctOrZero } from "./dom.js";
 import { STAT_IDS } from "./state.js";
 import { CLASS, withClassSkill } from "../data/classes.js";
 import { DUNGEONS } from "../data/dungeons.js";
-import { MAX_ENHANCE } from "../data/buffs.js";
+import { MAX_ENHANCE, BUFF_ITEMS } from "../data/buffs.js";
 import { hasAtkPct, statAtkPct } from "../calc/stats.js";
 import { buildSetup } from "../calc/buffs.js";
 
@@ -13,6 +13,10 @@ export function initInputs() {
   for (const name of Object.keys(CLASS)) $("cls").add(new Option(name, name));
   for (const name of Object.keys(DUNGEONS)) $("field").add(new Option(name, name));
   for (const id of ["pants", "shoes"]) for (let n = 0; n <= MAX_ENHANCE; n++) $(id).add(new Option(n + "강", n));
+  for (const [id, slot] of [["acc_face_top", "face_top"], ["acc_ear", "ear"]]) {
+    $(id).add(new Option("해당사항 없음", ""));
+    for (const name of Object.keys(BUFF_ITEMS[slot])) $(id).add(new Option(name, name));
+  }
 }
 
 /**
@@ -36,11 +40,13 @@ export function readInputs() {
   }
   if (hasAtkPct(win)) win.atk_pct = statAtkPct(win.A, win.A_max, win.W);
 
+  $("acc_battle").disabled = !(BUFF_ITEMS.ear[$("acc_ear").value] || {}).cd_mult_by_battle;   // 글리터의 훈장일 때만 쓴다
   const { setup, detail } = buildSetup({
     town: $("town").value,
     yellow: $("yellow").value === "1",
     pantsEnhance: num("pants") || 0, shoesEnhance: num("shoes") || 0,
     stoneCdr: pctOrZero("enc_cdr"), stoneDur: pctOrZero("enc_dur"),
+    faceTop: $("acc_face_top").value, ear: $("acc_ear").value, battle: num("acc_battle") || 0,
   });
   setup.debuff = DUNGEONS[dungeon].debuff;   // 적응력 계산에 쓴다
   return { cls, job: withClassSkill(cls, $("cls_skill").value), dungeon, resist: DUNGEONS[dungeon].critResist, win, setup, town: $("town").value, buffs: detail, shareBlank: $("share_cho").value === "" };

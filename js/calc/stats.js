@@ -6,7 +6,7 @@
 //             adapt, super_adapt, cdr_gang, cdr_cho }   쿨감(cdr_*)은 DPS에 넣지 않는다
 //   job   : 전직 패시브 (js/data/classes.js 의 한 항목). 없으면 NO_PASSIVE
 //   setup : 스탯창에 안 보이는 버프 묶음 (js/calc/buffs.js 의 buildSetup 결과)
-//           { town_crit, town_maxi, town_adapt, town_boss, crit_mults[], maxi_mults[], cd_base_mults[], guild_boss, enc_uptime,
+//           { town_crit, town_maxi, town_adapt, town_boss, crit_mults[], maxi_mults[], cd_base_mults[], item_cd_mults[], guild_boss, enc_uptime,
 //             debuff }   debuff 는 던전의 마계 디버프 (화면에서 고른 던전 값을 넣는다)
 
 import { critFromStat, statFromCrit, maxiFromStat, statFromMaxi } from "./diminish.js";
@@ -116,8 +116,8 @@ export function resolve(win, job, critResist, setup) {
   }
   // 크뎀: 기본 크뎀 150%에 곱연산되는 항목은 150% x (곱 - 1) 만큼의 크뎀으로 환산해서 더한다
   if (has(s, "crit_dmg")) {
-    s.cd_base_prod = prod(setup.cd_base_mults.concat([c.cd_base]));   // 기본 크뎀 150%에 곱하는 배율 (옵션 비교의 곱연 크뎀에 쓴다)
-    s.cd_final_mult = 1 + c.cd_final;                                   // 크리 시 피해 배율
+    s.cd_base_prod = prod(setup.cd_base_mults.concat(setup.item_cd_mults || [], [c.cd_base]));   // 기본 크뎀 150%에 곱하는 배율 (옵션 비교의 곱연 크뎀에 쓴다)
+    s.cd_final_mult = 1 + c.cd_final;                                   // 크리 시 피해 배율 (곱연 크뎀도 이 배율을 같이 받는다)
     s.crit_dmg = (s.crit_dmg + c.cd_s + 1.5 * (s.cd_base_prod - 1)) * s.cd_final_mult;
   }
   if (has(s, "maxi")) {
@@ -141,7 +141,7 @@ export function resolve(win, job, critResist, setup) {
  */
 export function dpsIndex(s) {
   let x = 1;
-  for (const k of ["atk_pct", "all_skill", "boss", "add", "hp100", "final"]) x *= 1 + (s[k] || 0);   // final: 옵션 비교의 최종 데미지 (스탯창에는 없다)
+  for (const k of ["atk_pct", "all_skill", "boss", "add", "hp100"]) x *= 1 + (s[k] || 0);
   x *= 1 + Math.min(s.polar || 0, POLAR_CAP);
   if (has(s, "cho") || has(s, "gang")) {
     const g = s.gang || 0, c = s.cho || 0;

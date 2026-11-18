@@ -196,7 +196,8 @@ const minus = (a, b) => {
 const prodOf = xs => xs.reduce((a, x) => a * (1 + x), 1);
 
 function dps(win, job, resist, setup, fx) {
-  const s = resolve(win, job, resist, Object.assign({}, setup, { cd_base_mults: setup.cd_base_mults.concat(fx.cdMults) }));
+  // 버프 세팅의 얼상·귀걸이 크뎀 곱연산(item_cd_mults)은 빼고 장비 쪽 효과(fx.cdMults)로 센다 (같은 아이템을 두 번 세지 않게)
+  const s = resolve(win, job, resist, Object.assign({}, setup, { cd_base_mults: setup.cd_base_mults.concat(fx.cdMults), item_cd_mults: [] }));
   return dpsIndex(s) * prodOf(fx.finals) * (1 + (setup.town_final || 0));   // 마을 버프의 최종 데미지 (있는 버프만)
 }
 

@@ -97,3 +97,28 @@ test("옵션 비교: 시트 ver.3.0.19 Main '옵션 효율표'(각 1%)와 같다
     assert.ok(Math.abs(r.gain - sheet[r.kind]) < 1e-9 + 1e-6 * sheet[r.kind], `${r.kind}: ${r.gain} vs ${sheet[r.kind]}`);
   }
 });
+
+test("버프형 아이템: 헤일로 크뎀 곱연 2%, 글리터의 훈장은 배틀·클래식 카트리지 개수 (시트 '미표시 효과' 카트리지 장착 효과 표)", async () => {
+  const { buffItems, buildSetup } = await import("../js/calc/buffs.js");
+  assert.deepEqual(buffItems("마에스트로 헤일로", "", 0), [{ name: "마에스트로 헤일로", slot: "face_top", v: 0.02 }]);
+  assert.deepEqual([0, 1, 2, 3].map(n => buffItems("", "글리터의 훈장", n)[0].v), [0, 0.005, 0.01, 0.01]);   // 2개 이상은 같다
+  assert.deepEqual(buffItems("마목의 면류관", "안테나 이어링", 2).map(x => x.v), [0, 0]);                    // 최종 데미지만 있는 아이템
+  assert.deepEqual(buffItems("", "", 2), []);
+  // 시트 Main 예시: 글리터의 훈장 + 네블론 4부위지만 배틀·클래식 카트리지가 없어서 C290 = 1
+  const base = { town: "엘 하우스(강화)", pantsEnhance: 11, shoesEnhance: 11, yellow: true, stoneCdr: 0.3, stoneDur: 0 };
+  assert.deepEqual(buildSetup({ ...base, ear: "글리터의 훈장", battle: 0 }).setup.item_cd_mults, []);
+  const job = withClassSkill("페이탈 팬텀", "체인지"), win = { crit: 0.864, crit_dmg: 1.915, maxi: 0.6588 };
+  const plain = resolve(win, job, 0.30, buildSetup(base).setup);
+  const both = resolve(win, job, 0.30, buildSetup({ ...base, faceTop: "마에스트로 헤일로", ear: "글리터의 훈장", battle: 1 }).setup);
+  near(both.cd_base_prod / plain.cd_base_prod, 1.02 * 1.005, 12);
+});
+
+test("버프형 아이템: 악세 세팅 비교는 버프 세팅의 아이템 크뎀을 빼고 장비 쪽에서 센다 (두 번 세지 않음)", async () => {
+  const { compareGear, emptyGear } = await import("../js/calc/gear.js");
+  const { buildSetup } = await import("../js/calc/buffs.js");
+  const base = { town: "온천 버프", pantsEnhance: 11, shoesEnhance: 11, yellow: true, stoneCdr: 0.3, stoneDur: 0 };
+  const win = { crit: 0.83, crit_dmg: 1.994, maxi: 0.6512, boss: 1.9, adapt: 0.59, super_adapt: 0.1, cdr_gang: 0.32, cdr_cho: 0.32 };
+  const run = setup => compareGear({ win, job: CLASS["트윈즈 피카로"], resist: 0.30, setup: { ...setup, debuff: 0.95 } },
+    Object.assign(emptyGear(), { normal: { ear: "안테나 이어링" } }), Object.assign(emptyGear(), { normal: { ear: "글리터의 훈장" } })).gain;
+  near(run(buildSetup({ ...base, faceTop: "마에스트로 헤일로", ear: "글리터의 훈장", battle: 2 }).setup), run(buildSetup(base).setup), 12);
+});
