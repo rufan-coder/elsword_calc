@@ -51,6 +51,7 @@ export function buildSetup(choice) {
     cd_base_mults: [PARTY_CRIT_DAMAGE],
     item_cd_mults: items.map(x => x.v).filter(v => v),   // 버프형 아이템 크뎀 곱연산 (악세 세팅은 장비 쪽에서 따로 세서 뺀다)
     item_cd: items,
+    glitter_battle: choice.battle == null ? null : Math.max(0, Math.min(2, Math.floor(choice.battle))),   // 악세 세팅에서도 글리터의 훈장 곱연 크뎀을 이 개수로 센다
     guild_boss: GUILD_BOSS_DAMAGE,
     enc_uptime: enc.uptime,
   };

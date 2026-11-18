@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@500;600;700&family=Noto+Sans+KR:wght@400;500;700&display=swap">
 <link rel="stylesheet" href="css/style.css">
-<meta name="build" content="ver.1.2.8">
+<meta name="build" content="ver.1.2.9">
 <script>
 // 배포 직후에는 브라우저에 새 파일과 예전 파일이 섞여 남을 수 있다 (js/build.js 참고).
 // 그 상태로 열려서 시작 중에 오류가 나면, 이 페이지가 쓰는 파일을 전부 새로 받아 딱 한 번만 다시 연다.
@@ -127,7 +127,7 @@
             <div class="field"><label for="acc_ear">귀걸이</label><select id="acc_ear"></select></div>
             <div class="field"><label for="acc_battle">배틀·클래식 카트리지</label><select id="acc_battle"><option value="0">0개</option><option value="1">1개</option><option value="2">2개 이상</option></select></div>
           </div>
-          <p class="hint" style="margin-top:6px">스탯창에 안 보이는 크뎀 곱연산만 넣어요: 마에스트로 헤일로 2%, 글리터의 훈장은 네블론 방어구에 단 배틀·클래식 카트리지 1개 0.5% · 2개 이상 1% (같은 카트리지는 1개로 세요). 최종 데미지는 옵션 비교에 영향이 없어서 빼요.</p>
+          <p class="hint" style="margin-top:6px">스탯창에 안 보이는 크뎀 곱연산만 넣어요: 마에스트로 헤일로 2%, 글리터의 훈장은 네블론 방어구에 단 배틀·클래식 카트리지 1개 0.5% · 2개 이상 1% (같은 카트리지는 1개로 세요). 최종 데미지는 옵션 비교에 영향이 없어서 빼요. 얼굴 상단·귀걸이는 악세 세팅의 "지금" 일반 악세와 같은 칸이라 한쪽을 바꾸면 다른 쪽도 바뀌고, 카트리지 개수는 악세 세팅에서도 그대로 써요.</p>
           <div class="sub" style="margin-top:14px">비전의 원석 (격려)</div>
           <div class="grid">
             <div class="field"><label for="enc_cdr">격려 재사용 시간 감소 합계</label><div class="unit"><input type="number" id="enc_cdr" step="1" min="0" inputmode="decimal"><span>%</span></div></div>

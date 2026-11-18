@@ -16,11 +16,13 @@
 //   스탯창 값에는 지금 낀 것의 효과가 이미 들어 있다. 그래서
 //     바꾼 뒤 스탯창 = 지금 스탯창 - 지금 장비의 "보이는 효과" + 바꾼 장비의 "보이는 효과"
 //   곱연 크뎀과 최종 데미지는 스탯창에 안 보이므로 양쪽 모두 따로 곱해서 비교한다.
+//   글리터의 훈장의 곱연 크뎀은 버프 세팅의 배틀·클래식 카트리지 개수(setup.glitter_battle)를 따른다.
 
 import { ACCESSORIES, NEW_ACCESSORIES, ARMOR_AVATARS, WEAPON_AVATARS, OUTFITS, WEAPONS, SETS, ATMA, AVATAR_SET_LIMIT, SPIRIT_STONES } from "../data/accessories.js";
 import { critFromStat, statFromCrit, maxiFromStat, statFromMaxi } from "./diminish.js";
 import { resolve, dpsIndex, has } from "./stats.js";
-import { setupWithTown } from "./buffs.js";
+import { setupWithTown, buffItems } from "./buffs.js";
+import { BUFF_ITEMS } from "../data/buffs.js";
 import { CRIT_MAXI_PER_SLOT } from "../data/stones.js";
 
 const ACC_BY_NAME = new Map([...ACCESSORIES, ...NEW_ACCESSORIES].map(a => [a.name, a]));
@@ -78,6 +80,25 @@ function prepared(stats, atkType) {
   return list;
 }
 
+/**
+ * 일반 악세의 능력치. 곱연 크뎀이 카트리지 개수에 따라 바뀌는 것(글리터의 훈장)은 battle 개수의 값으로 바꾼다.
+ * battle 이 null 이면 데이터 값 그대로 (카트리지 2개 이상과 같음). 같은 묶음을 돌려줘야 prepared()의 캐시가 맞아서 개수별로 한 번만 만든다.
+ */
+const BY_BATTLE = new Map();
+export function itemStats(a, battle) {
+  const e = battle != null && a.layer === "normal" && (BUFF_ITEMS[a.slot] || {})[a.name];
+  if (!e || !e.cd_mult_by_battle) return a.stats;
+  const key = `${a.name}|${battle}`;
+  if (!BY_BATTLE.has(key)) {
+    const v = buffItems(a.slot === "face_top" ? a.name : "", a.slot === "ear" ? a.name : "", battle)[0].v;
+    const s = Object.assign({}, a.stats);
+    delete s.cd_mult;
+    if (v) s.cd_mult = v;
+    BY_BATTLE.set(key, s);
+  }
+  return BY_BATTLE.get(key);
+}
+
 /** 효과 묶음에 다른 효과를 더한다 (곱연 크뎀·최종 데미지는 따로 모은다) */
 function addStats(acc, stats, atkType) {
   if (!stats) return;
@@ -133,12 +154,13 @@ export function atmaSet(gear) {
  * 장착 상태의 효과 합계.
  * avatarChoice: 무악 세트가 4개 이상일 때 켤 세트 이름 목록 (없으면 개수가 많은 순)
  * ignore      : 세트 효과를 세지 않을 세트 이름 Set (자동 찾기가 오래된 세트를 맞추지 않게 할 때)
+ * battle      : 버프 세팅의 배틀·클래식 카트리지 개수 (글리터의 훈장 곱연 크뎀. null 이면 데이터 값)
  */
-export function gearEffects(gear, atkType, avatarChoice, ignore) {
+export function gearEffects(gear, atkType, avatarChoice, ignore, battle = null) {
   const acc = { visible: {}, ignored: {}, cdMults: [], finals: [], unknown: [] };
   const items = [];
   for (const layer of ["avatar", "normal"]) for (const name of Object.values(gear[layer])) { const a = ACC_BY_NAME.get(name); if (a) items.push(a); }
-  for (const a of items) { addStats(acc, a.stats, atkType); if (a.unknown) acc.unknown.push(a.name); }
+  for (const a of items) { addStats(acc, itemStats(a, battle), atkType); if (a.unknown) acc.unknown.push(a.name); }
   const w = WAVATAR_BY_NAME.get(gear.wavatar); if (w) addStats(acc, w.stats, atkType);
   const o = OUTFIT_BY_NAME.get(gear.outfit); if (o) addStats(acc, o.stats, atkType);
   for (const [piece, set] of Object.entries(gear.armor)) {
@@ -270,7 +292,8 @@ function bestAvatarChoice(gear, score, ignore) {
 export function gearScorer(ctx, beforeGear, { ignoreSets = null } = {}) {
   const { win, job, resist, setup } = ctx, atkType = job ? job.type : "물리";
   const setupFor = g => g && g.town && g.town !== ctx.town ? setupWithTown(setup, g.town) : setup;
-  const before = gearEffects(beforeGear, atkType, beforeGear.avatarSets, ignoreSets);
+  const battle = setup.glitter_battle ?? null;
+  const before = gearEffects(beforeGear, atkType, beforeGear.avatarSets, ignoreSets, battle);
   const baseDps = dps(win, job, resist, setup, before);
   // 크리·극대 소켓 기준: 대신 끼울 마법석은 지금 상태에서 한 칸 끼웠을 때 가장 좋은 것, 뺄 마법석은 한 칸 뺐을 때 손해가 가장 적은 것 하나씩
   // (칸마다 다시 고르면 자동 찾기가 몇 배 느려진다. 순서가 바뀌는 경우는 드물다)
@@ -292,7 +315,7 @@ export function gearScorer(ctx, beforeGear, { ignoreSets = null } = {}) {
   };
   const valueOf = (fx, g) => settle(fx, setupFor(g)).value / baseDps;
   const afterFor = (g, choice, exact) => {
-    const fx = gearEffects(g, atkType, choice, ignoreSets), st = setupFor(g), r = settle(fx, st, exact);
+    const fx = gearEffects(g, atkType, choice, ignoreSets, battle), st = setupFor(g), r = settle(fx, st, exact);
     return { fx, shifted: r.shifted, real: r.real, swaps: r.swaps, dropped: r.dropped, setup: st, value: r.value / baseDps };
   };
   // 바꾼 쪽은 사용자가 고르지 않았으면 가장 좋은 무악 세트 조합을 고른다 (켤 세트는 소켓 기준 없이 정확한 값으로 고른다)

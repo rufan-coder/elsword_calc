@@ -113,12 +113,17 @@ test("버프형 아이템: 헤일로 크뎀 곱연 2%, 글리터의 훈장은 �
   near(both.cd_base_prod / plain.cd_base_prod, 1.02 * 1.005, 12);
 });
 
-test("버프형 아이템: 악세 세팅 비교는 버프 세팅의 아이템 크뎀을 빼고 장비 쪽에서 센다 (두 번 세지 않음)", async () => {
+test("버프형 아이템: 악세 세팅은 버프 세팅의 아이템 크뎀을 빼고 장비 쪽에서 센다 (두 번 세지 않음). 글리터의 훈장은 카트리지 개수대로", async () => {
   const { compareGear, emptyGear } = await import("../js/calc/gear.js");
   const { buildSetup } = await import("../js/calc/buffs.js");
   const base = { town: "온천 버프", pantsEnhance: 11, shoesEnhance: 11, yellow: true, stoneCdr: 0.3, stoneDur: 0 };
   const win = { crit: 0.83, crit_dmg: 1.994, maxi: 0.6512, boss: 1.9, adapt: 0.59, super_adapt: 0.1, cdr_gang: 0.32, cdr_cho: 0.32 };
   const run = setup => compareGear({ win, job: CLASS["트윈즈 피카로"], resist: 0.30, setup: { ...setup, debuff: 0.95 } },
-    Object.assign(emptyGear(), { normal: { ear: "안테나 이어링" } }), Object.assign(emptyGear(), { normal: { ear: "글리터의 훈장" } })).gain;
-  near(run(buildSetup({ ...base, faceTop: "마에스트로 헤일로", ear: "글리터의 훈장", battle: 2 }).setup), run(buildSetup(base).setup), 12);
+    Object.assign(emptyGear(), { normal: { ear: "안테나 이어링" } }), Object.assign(emptyGear(), { normal: { ear: "글리터의 훈장" } }));
+  // 버프 세팅에 헤일로를 골라도 악세 세팅 비교 값은 같다 (장비 쪽 "지금"에 없는 아이템은 세지 않음)
+  near(run(buildSetup({ ...base, faceTop: "마에스트로 헤일로", ear: "글리터의 훈장", battle: 2 }).setup).gain, run(buildSetup(base).setup).gain, 12);
+  assert.deepEqual([0, 1, 2].map(n => run(buildSetup({ ...base, battle: n }).setup).after.cdMults), [[], [0.005], [0.01]]);
+  assert.deepEqual(run(buildSetup(base).setup).after.cdMults, [0.01]);   // 개수를 안 주면 데이터 값 (2개 이상)
+  const g0 = run(buildSetup({ ...base, battle: 0 }).setup).gain, g2 = run(buildSetup({ ...base, battle: 2 }).setup).gain;
+  assert.ok(g2 > g0 + 0.005);
 });

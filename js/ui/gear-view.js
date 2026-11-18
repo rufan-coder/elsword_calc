@@ -6,7 +6,7 @@ import { ACC_SLOTS, ACCESSORIES, NEW_ACCESSORIES, ARMOR_AVATARS, WEAPON_AVATARS,
 import { ICONS } from "../data/icons.js";
 import { compareGear, emptyGear, STAT_NAMES, IGNORED } from "../calc/gear.js";
 import { optimizeGear, townsToTry, sortByTown, OVER_PENALTY } from "../calc/gear-optimize.js";
-import { TOWN_BUFFS } from "../data/buffs.js";
+import { TOWN_BUFFS, BUFF_ITEMS } from "../data/buffs.js";
 import { capOver, CAP_NOTES } from "../calc/caps.js";
 import { SWAP_STONES } from "../data/stones.js";
 import { findCharWindow, equipCells } from "../ocr/equip-window.js";
@@ -309,6 +309,33 @@ export function renderGear({ win, job, resist, setup, town }) {
   if (notes.length) html += `<ul class="notes">${notes.map(n => `<li>${esc(n)}</li>`).join("")}</ul>`;
   out.innerHTML = html;
 }
+
+// ----- 버프 세팅의 버프형 아이템(얼굴 상단·귀걸이)과 "지금" 일반 악세를 같은 값으로 맞춘다 -----
+// 둘 다 실제로 낀 일반 악세라서, 한쪽만 바꾸면 스펙 계산과 악세 세팅의 실전 크뎀이 서로 달라진다.
+const BUFF_SLOTS = [["face_top", "acc_face_top"], ["ear", "acc_ear"]];
+let buffSynced = null;   // 마지막으로 맞춘 버프 세팅 값. null 이면 다음에는 "지금" 칸 값을 따른다
+/**
+ * 화면을 다시 그릴 때마다 부른다. 지난번에 맞춘 뒤 버프 세팅 쪽을 바꿨으면 "지금" 칸을 바꾸고, 아니면 버프 세팅 칸을 "지금" 칸에 맞춘다.
+ * "지금" 칸이 버프형 아이템이 아닌 것(예: 타마칸의 인장)이면 버프 세팅은 "해당사항 없음"이다.
+ */
+export function syncBuffItems() {
+  const prev = buffSynced;
+  let changed = false;
+  buffSynced = {};
+  for (const [slot, id] of BUFF_SLOTS) {
+    const g = sel("now", "normal", slot), b = $(id);
+    if (!g || !b) continue;
+    const fromGear = BUFF_ITEMS[slot][g.value] ? g.value : "";
+    if (b.value !== fromGear) {
+      if (prev && b.value !== prev[slot]) { g.value = b.value; changed = true; }
+      else b.value = fromGear;
+    }
+    buffSynced[slot] = b.value;
+  }
+  if (changed) { syncGrades(); saveGear(); }
+}
+/** 다음 syncBuffItems 에서 버프 세팅을 "지금" 칸 값으로 맞춘다 (스펙 계산을 예시로 되돌렸을 때 악세 세팅을 지우지 않게) */
+export function resyncBuffItems() { buffSynced = null; }
 
 // ----- 저장 -----
 function allSelects() { return [...document.querySelectorAll("#gear-tables select")]; }

@@ -10,7 +10,7 @@ import { initCompare, renderCompare } from "./ui/compare-view.js";
 import { renderCkb } from "./ui/ckb-view.js";
 import { initSocket, renderSocket, syncSocketControls } from "./ui/socket-view.js";
 import { initScreenshot, clearFilled } from "./ui/screenshot-view.js";
-import { initGear, renderGear } from "./ui/gear-view.js";
+import { initGear, renderGear, syncBuffItems, resyncBuffItems } from "./ui/gear-view.js";
 import { resolve } from "./calc/stats.js";
 import { BUILD } from "./build.js";
 
@@ -42,6 +42,7 @@ function fitSticky() {
 }
 
 function render() {
+  syncBuffItems();   // 버프 세팅의 얼상·귀걸이 = 악세 세팅 "지금"의 일반 악세
   const input = readInputs();
   const ctx = Object.assign(input, { base: resolve(input.win, input.job, input.resist, input.setup) });
 
@@ -78,7 +79,7 @@ function start() {
   initGear(render);
   window.addEventListener("hashchange", () => { setPage(location.hash.slice(1)); render(); window.scrollTo(0, 0); });
   setPage(location.hash.slice(1));
-  $("reset").addEventListener("click", () => { loadState(DEFAULTS); syncSocketControls(); clearFilled(); render(); });
+  $("reset").addEventListener("click", () => { loadState(DEFAULTS); resyncBuffItems(); syncSocketControls(); clearFilled(); render(); });
   document.querySelector(".tabs").addEventListener("click", e => {
     const b = e.target.closest('[role="tab"]');
     if (b) { setTab(b.id.slice(4)); render(); }
