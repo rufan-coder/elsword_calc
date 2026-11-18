@@ -58,8 +58,8 @@ function missingFor(needs, s) {
 
 /**
  * 옵션별 DPS 상승률.
- * options: [{ name, kind, value, price }]
- * 반환: 같은 순서의 배열에 gain(상승률), miss(비어 있는 입력), per(가격 1당 상승률)를 붙인 것
+ * options: [{ name, kind, value }]
+ * 반환: 같은 순서의 배열에 gain(상승률), miss(비어 있는 입력)를 붙인 것
  */
 export function compare(base, options) {
   const before = dpsIndex(base);
@@ -67,6 +67,6 @@ export function compare(base, options) {
     const kind = OPTION_KINDS[o.kind];
     const miss = missingFor(kind.needs, base);
     const gain = miss ? null : dpsIndex(applyOption(base, kind.delta(o.value))) / before - 1;
-    return Object.assign({}, o, { gain, miss, per: gain != null && o.price > 0 ? gain / o.price : null });
+    return Object.assign({}, o, { gain, miss });
   });
 }

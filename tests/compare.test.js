@@ -30,9 +30,3 @@ test("필요한 입력이 없으면 계산하지 않고 무엇이 비었는지 �
   assert.equal(r.gain, null);
   assert.match(r.miss, /크리티컬/);
 });
-
-test("가격을 넣으면 가격 1당 상승률이 나온다", () => {
-  const [a, b] = compare({ boss: 1.0 }, [{ name: "a", kind: "boss", value: 0.1, price: 100 }, { name: "b", kind: "boss", value: 0.1 }]);
-  near(a.per, a.gain / 100, 9);
-  assert.equal(b.per, null);
-});
