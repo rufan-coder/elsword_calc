@@ -9,9 +9,9 @@ import { TOWN_BUFFS } from "../data/buffs.js";
 
 /** 스탯창 값 입력칸 (id) */
 export const STAT_IDS = ["crit", "crit_dmg", "maxi", "A", "A_max", "W", "boss", "all_skill", "cho", "gang", "share_cho", "polar", "add", "hp_over", "hp_under", "hp100",
-  "adapt", "super_adapt", "cdr_gang", "cdr_cho"];
+  "adapt", "super_adapt", "cdr_gang", "cdr_cho", "aspd"];
 /** 버프 세팅 입력칸 */
-const SETUP_IDS = ["town", "yellow", "pants", "shoes", "enc_cdr", "enc_dur", "acc_face_top", "acc_ear", "acc_battle"];
+const SETUP_IDS = ["town", "yellow", "pants", "shoes", "enc_cdr", "enc_dur", "acc_face_top", "acc_ear", "acc_battle", "aspd_party"];
 /** 크극·소켓 최적화 탭의 입력칸 */
 const TOOL_IDS = ["ckb_boss", "ckb_min", "sk_neb", "sk_slots", "sk_boss_target", "sk_atma",
   ...STONES.map(s => "sk_per_" + s.key), "sk_cnt_empty", ...STONES.map(s => "sk_cnt_" + s.key)];
@@ -22,9 +22,9 @@ export const DEFAULTS = {
   cls: "트윈즈 피카로", cls_skill: "", field: "네블론 레이드",
   crit: 83, crit_dmg: 199.4, maxi: 65.12, A: 124266, A_max: 169166, W: 44020, boss: 190, all_skill: 127.5, cho: 130.1, gang: 100.1,
   share_cho: 95, polar: 59.2, add: 91.5, hp_over: 34, hp_under: 34, hp100: 41.5,
-  adapt: 59, super_adapt: 10, cdr_gang: 32, cdr_cho: 32,
+  adapt: 59, super_adapt: 10, cdr_gang: 32, cdr_cho: 32, aspd: "",
   town: "온천 버프", yellow: "1", pants: 11, shoes: 11,
-  enc_cdr: 30, enc_dur: 0, acc_face_top: "", acc_ear: "", acc_battle: "0",
+  enc_cdr: 30, enc_dur: 0, acc_face_top: "", acc_ear: "", acc_battle: "0", aspd_party: "1",
   ckb_boss: "2.5", ckb_min: 25, sk_neb: "0", sk_slots: SLOT_BASE, sk_boss_target: "boss", sk_atma: "1",   // 힘트마 기준이면 아트마 사용은 O로 고정
   ...Object.fromEntries(STONES.map(s => ["sk_per_" + s.key, s.percent])),
   sk_cnt_crit: 12, sk_cnt_maxi: 8, sk_cnt_boss: 4, sk_cnt_boss2: 4, sk_cnt_cho: 10,

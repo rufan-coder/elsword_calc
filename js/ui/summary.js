@@ -5,6 +5,8 @@ import { CLASS, CLASS_NOTES, CLASS_SKILLS, PASSIVE_SOURCES } from "../data/class
 import { has, hasCrit, hasMaxi, critFinal, maxiFinal, adaptFinal, POLAR_CAP } from "../calc/stats.js";
 import { chomokGain } from "../calc/chomok.js";
 import { capOver, CAP_NOTES } from "../calc/caps.js";
+import { aspdCalc } from "../calc/aspd.js";
+import { ASPD } from "../data/buffs.js";
 
 function passiveText(stat, mult, add) {
   const parts = [];
@@ -29,10 +31,11 @@ const overText = (v, k, prefix = "") => `<span class="over" title="${CAP_NOTES[k
 // 크뎀·보뎀이 어디서 왔는지 작은 글씨로: "스탯창 199.4% · 패시브 +20% · 파티 버프 ×10% ..."
 const PARTS_NOTE = "+는 합연산, ×는 곱연산(기본 크뎀 150%에만 곱해요)이에요. 밑줄 친 항목에 마우스를 올리면 어떤 패시브인지 나와요.";
 const plus = x => "+" + trimPct(x), times = x => "×" + trimPct(x);
+const ASPD_NOTE = "×는 곱연산이에요. 곱연산 버프끼리 곱해서 ×1.4까지, 최종 동작 속도는 70%까지 올라요.";
 /** parts: [이름, 값 글자, 툴팁] 목록. 값이 0인 항목은 미리 빼고 넘긴다 */
-function partsHtml(parts) {
+function partsHtml(parts, note = PARTS_NOTE) {
   const items = parts.filter(Boolean).map(([label, value, tip]) => `<span${tip ? ` class="src" title="${esc(tip)}"` : ""}>${label} ${value}</span>`);
-  return items.length ? `<div class="parts" title="${PARTS_NOTE}">${items.join(" · ")}</div>` : "";
+  return items.length ? `<div class="parts" title="${note}">${items.join(" · ")}</div>` : "";
 }
 /** 고른 선택 스킬: { name: "크리티컬 소드(일반)", o: 그 선택지의 효과(단위 %) } 또는 null */
 function chosenSkill(cls, job) {
@@ -66,7 +69,8 @@ export function renderSummary(ctx) {
   const townParts = [["크리", town.crit], ["극대", town.maxi], ["적응력", town.adapt], ["보뎀", town.boss], ["최종뎀", town.final]].filter(t => t[1]).map(t => `${t[0]} +${trimPct(t[1])}`);
   $("setup-info").textContent = `적용 값 · 마을 버프 ${townParts.join(" ") || "없음"} · 하의 크확 ×${trimPct(pants)} · 신발 극대 ×${trimPct(shoes)}` + (yellow ? " · 황색 크극 ×8%" : "") +
     ` · 격려 가동률 ${(enc.uptime * 100).toFixed(1)}% (쿨 ${Math.round(enc.cool)}초, 지속 ${Math.round(enc.dur)}초)` +
-    (items || []).filter(x => x.v).map(x => ` · ${x.name} 크뎀 곱연 ×${trimPct(x.v)}`).join("");   // 최종 데미지만 있는 아이템은 적지 않는다
+    (items || []).filter(x => x.v).map(x => ` · ${x.name} 크뎀 곱연 ×${trimPct(x.v)}`).join("") +   // 최종 데미지만 있는 아이템은 적지 않는다
+    ` · 동작 속도 ${(setup.aspd_mults || []).some(x => x.name === "파티") ? "파티" : "솔로"} 기준`;
 
   // 실전 수치. 상한을 넘은 스탯은 넘은 만큼을 빨간 글씨로 붙인다. 크뎀·보뎀은 아래에 작은 글씨로 어디서 온 값인지 적는다
   // 타일: [이름, 값, 빨간 글씨 등 한 줄, 추가 class, 툴팁, 출처 목록]
@@ -98,12 +102,21 @@ export function renderSummary(ctx) {
   }
   // 양극화: 상한(60%)을 넘었을 때만 보여 준다
   if (over.polar) tiles.push(["양극화", fmt(POLAR_CAP, 1), overText(over.polar, "polar"), "", CAP_NOTES.polar]);
+  // 동작 속도: DPS에는 안 넣는다. 평소/격려 중 실전 값, 격려 중 천장(70%)까지 필요한 스탯창 값
+  if (has(win, "aspd")) {
+    const mults = setup.aspd_mults || [], a = aspdCalc(win.aspd, mults.map(x => x.v));
+    const line = a.over > 5e-5 ? overText(a.over, "aspd", "스탯창 ") + " (격려 중 천장)"
+      : a.need != null ? `격려 중 천장까지 스탯창 ${trimPct(a.need)}` : "격려 중에도 천장(70%)에 못 닿아요";
+    tiles.push(["동작 속도 (평소/격려 중)", `${fmt(a.normal, 1)}/${fmt(a.enc, 1)}`, line, "wide",
+      "DPS에는 넣지 않아요. 무점감 동속 패시브(극소수 전직)는 빠져 있어요.",
+      [["스탯창", trimPct(Math.min(win.aspd, ASPD.window_cap))], ...mults.map(x => [x.name, times(x.v)]), ["격려", times(ASPD.encourage) + " (격려 중)"]], ASPD_NOTE]);
+  }
   // 초목: 크뎀 곱연산 30%를 얻고 보뎀 한 칸을 뺐을 때. "사냥석 뺀 기준/힘트마 뺀 기준"
   const chomok = chomokGain(win, job, resist, setup);
   if (chomok) tiles.push(["초목 효율", `${fmt(chomok.hunt)}/${fmt(chomok.atma)}`, "사냥석 -> 크리 / 힘트마 -> 크리", "chomok",
     "크뎀 곱연산 30%를 얻고 보뎀 사냥석(2.5%) 또는 힘트마(3%) 한 칸을 뺐을 때의 DPS 상승률"]);
   $("tiles").innerHTML = tiles.length
     ? tiles.map(t => `<div class="tile${t[3] ? " " + t[3] : ""}"${t[4] ? ` title="${t[4]}"` : ""}><div class="k">${t[0]}</div><div class="v">${t[1]}</div>` +
-        (t[2] ? `<div class="from">${t[2]}</div>` : "") + (t[5] ? partsHtml(t[5]) : "") + `</div>`).join("")
+        (t[2] ? `<div class="from">${t[2]}</div>` : "") + (t[5] ? partsHtml(t[5], t[6]) : "") + `</div>`).join("")
     : `<p class="hint">스탯창 값을 입력하면 버프와 패시브가 반영된 수치가 여기에 나와요.</p>`;
 }

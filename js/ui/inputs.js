@@ -39,6 +39,7 @@ export function readInputs() {
     else { const v = pct(id); if (v != null) win[id] = v; }
   }
   if (hasAtkPct(win)) win.atk_pct = statAtkPct(win.A, win.A_max, win.W);
+  if (win.aspd >= 1) win.aspd -= 1;   // 동작 속도를 121.4처럼 100 기준으로 넣었으면 21.4%로 본다 (스탯창 상한이 30%라 헷갈릴 일이 없다)
 
   $("acc_battle").disabled = !(BUFF_ITEMS.ear[$("acc_ear").value] || {}).cd_mult_by_battle;   // 글리터의 훈장일 때만 쓴다
   const { setup, detail } = buildSetup({
@@ -47,6 +48,7 @@ export function readInputs() {
     pantsEnhance: num("pants") || 0, shoesEnhance: num("shoes") || 0,
     stoneCdr: pctOrZero("enc_cdr"), stoneDur: pctOrZero("enc_dur"),
     faceTop: $("acc_face_top").value, ear: $("acc_ear").value, battle: num("acc_battle") || 0,
+    party: $("aspd_party").value === "1",
   });
   setup.debuff = DUNGEONS[dungeon].debuff;   // 적응력 계산에 쓴다
   return { cls, job: withClassSkill(cls, $("cls_skill").value), dungeon, resist: DUNGEONS[dungeon].critResist, win, setup, town: $("town").value, buffs: detail, shareBlank: $("share_cho").value === "" };

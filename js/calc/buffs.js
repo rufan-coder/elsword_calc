@@ -1,6 +1,7 @@
 // 버프 세팅(마을 버프, 장비 강화, 격려)을 계산에 쓰는 수치로 바꾼다.
 
 import { TOWN_BUFFS, ENHANCE_BASE_PERCENT, YELLOW_ARTIFACT, PARTY_CRIT_DAMAGE, GUILD_BOSS_DAMAGE, ENCOURAGE, BUFF_ITEMS } from "../data/buffs.js";
+import { aspdBuffs } from "./aspd.js";
 
 /**
  * 격려 가동률. 비전의 원석 수치(stoneCdr, stoneDur)는 성장 수치와 합연산된다.
@@ -35,7 +36,8 @@ export function buffItems(faceTop, ear, battle) {
 
 /**
  * 화면에서 고른 버프 세팅을 resolve()가 받는 setup으로 만든다.
- * choice: { town, pantsEnhance, shoesEnhance, yellow, stoneCdr, stoneDur, faceTop, ear, battle }
+ * choice: { town, pantsEnhance, shoesEnhance, yellow, stoneCdr, stoneDur, faceTop, ear, battle, party }
+ *   party: 동작 속도 파티 기준이면 true (파티 동속 곱연산을 넣는다. 크뎀 파티 버프와는 상관없음)
  * 반환: { setup, detail } - detail은 화면에 "적용 값"으로 보여 주기 위한 중간 수치
  */
 export function buildSetup(choice) {
@@ -54,6 +56,7 @@ export function buildSetup(choice) {
     glitter_battle: choice.battle == null ? null : Math.max(0, Math.min(2, Math.floor(choice.battle))),   // 악세 세팅에서도 글리터의 훈장 곱연 크뎀을 이 개수로 센다
     guild_boss: GUILD_BOSS_DAMAGE,
     enc_uptime: enc.uptime,
+    aspd_mults: aspdBuffs(choice.faceTop, choice.party !== false),   // 동작 속도 곱연산 버프 (격려 제외. DPS에는 안 씀)
   };
   return { setup, detail: { town, pants, shoes, yellow, enc, items } };
 }
