@@ -56,6 +56,8 @@ function critDmgParts({ cls, job, win, setup }) {
   ];
 }
 
+let lastTilesHtml = null;
+
 export function renderSummary(ctx) {
   const { cls, job, resist, win, base, setup, buffs } = ctx;
   // 전직·던전 안내
@@ -73,7 +75,7 @@ export function renderSummary(ctx) {
     ` · 동작 속도 ${(setup.aspd_mults || []).some(x => x.name === "파티") ? "파티" : "솔로"} 기준`;
 
   // 실전 수치. 상한을 넘은 스탯은 넘은 만큼을 빨간 글씨로 붙인다. 크뎀·보뎀은 아래에 작은 글씨로 어디서 온 값인지 적는다
-  // 타일: [이름, 값, 빨간 글씨 등 한 줄, 추가 class, 툴팁, 출처 목록]
+  // 타일: [이름, 값, 빨간 글씨 등 한 줄, 추가 class, 툴팁, 출처 목록, 출처 설명, 이름 오른쪽에 붙일 것]
   const over = capOver(win, setup, job, resist);
   const tiles = [];
   if (hasCrit(base)) {
@@ -104,19 +106,25 @@ export function renderSummary(ctx) {
   if (over.polar) tiles.push(["양극화", fmt(POLAR_CAP, 1), overText(over.polar, "polar"), "", CAP_NOTES.polar]);
   // 동작 속도: DPS에는 안 넣는다. 평소/격려 중 실전 값, 격려 중 천장(70%)까지 필요한 스탯창 값
   if (has(win, "aspd")) {
-    const mults = setup.aspd_mults || [], a = aspdCalc(win.aspd, mults.map(x => x.v));
+    const mults = setup.aspd_mults || [], a = aspdCalc(win.aspd, mults.map(x => x.v)), party = mults.some(x => x.name === "파티");
+    const seg = `<span class="seg" role="group" aria-label="동작 속도 기준">` +
+      [["1", "파티", "파티 동속 9% 포함"], ["0", "솔로", "파티 동속 없이"]].map(([v, label, tip]) =>
+        `<button type="button" data-aspd-party="${v}" aria-pressed="${(v === "1") === party}" title="${tip}">${label}</button>`).join("") + `</span>`;
     const line = a.over > 5e-5 ? overText(a.over, "aspd", "스탯창 ") + " (격려 중 천장)"
       : a.need != null ? `격려 중 천장까지 스탯창 ${trimPct(a.need)}` : "격려 중에도 천장(70%)에 못 닿아요";
     tiles.push(["동작 속도 (평소/격려 중)", `${fmt(a.normal, 1)}/${fmt(a.enc, 1)}`, line, "wide",
       "DPS에는 넣지 않아요. 무점감 동속 패시브(극소수 전직)는 빠져 있어요.",
-      [["스탯창", trimPct(Math.min(win.aspd, ASPD.window_cap))], ...mults.map(x => [x.name, times(x.v)]), ["격려", times(ASPD.encourage) + " (격려 중)"]], ASPD_NOTE]);
+      [["스탯창", trimPct(Math.min(win.aspd, ASPD.window_cap))], ...mults.map(x => [x.name, times(x.v)]), ["격려", times(ASPD.encourage) + " (격려 중)"]], ASPD_NOTE, seg]);
   }
   // 초목: 크뎀 곱연산 30%를 얻고 보뎀 한 칸을 뺐을 때. "사냥석 뺀 기준/힘트마 뺀 기준"
   const chomok = chomokGain(win, job, resist, setup);
   if (chomok) tiles.push(["초목 효율", `${fmt(chomok.hunt)}/${fmt(chomok.atma)}`, "사냥석 -> 크리 / 힘트마 -> 크리", "chomok",
     "크뎀 곱연산 30%를 얻고 보뎀 사냥석(2.5%) 또는 힘트마(3%) 한 칸을 뺐을 때의 DPS 상승률"]);
-  $("tiles").innerHTML = tiles.length
-    ? tiles.map(t => `<div class="tile${t[3] ? " " + t[3] : ""}"${t[4] ? ` title="${t[4]}"` : ""}><div class="k">${t[0]}</div><div class="v">${t[1]}</div>` +
+  const html = tiles.length
+    ? tiles.map(t => `<div class="tile${t[3] ? " " + t[3] : ""}"${t[4] ? ` title="${t[4]}"` : ""}>` +
+        (t[7] ? `<div class="k with-seg"><span>${t[0]}</span>${t[7]}</div>` : `<div class="k">${t[0]}</div>`) + `<div class="v">${t[1]}</div>` +
         (t[2] ? `<div class="from">${t[2]}</div>` : "") + (t[5] ? partsHtml(t[5], t[6]) : "") + `</div>`).join("")
     : `<p class="hint">스탯창 값을 입력하면 버프와 패시브가 반영된 수치가 여기에 나와요.</p>`;
+  // 바뀐 게 없으면 다시 그리지 않는다: 입력칸에서 빠져나올 때(change) 다시 그리면 그 사이에 누른 타일 안 버튼(파티/솔로)의 클릭이 사라진다
+  if (html !== lastTilesHtml) { $("tiles").innerHTML = html; lastTilesHtml = html; }
 }

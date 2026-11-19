@@ -13,6 +13,15 @@ export function initInputs() {
   for (const name of Object.keys(CLASS)) $("cls").add(new Option(name, name));
   for (const name of Object.keys(DUNGEONS)) $("field").add(new Option(name, name));
   for (const id of ["pants", "shoes"]) for (let n = 0; n <= MAX_ENHANCE; n++) $(id).add(new Option(n + "강", n));
+  // 실전 수치의 동작 속도 칸 오른쪽 위 파티/솔로 버튼 -> 숨은 aspd_party 값을 바꾸고 다시 계산 (타일은 다시 그려지니 포커스를 새 버튼으로 옮긴다)
+  $("tiles").addEventListener("click", e => {
+    const b = e.target.closest("[data-aspd-party]"), sel = $("aspd_party");
+    if (!b || sel.value === b.dataset.aspdParty) return;
+    sel.value = b.dataset.aspdParty;
+    sel.dispatchEvent(new Event("change", { bubbles: true }));
+    const again = $("tiles").querySelector(`[data-aspd-party="${b.dataset.aspdParty}"]`);
+    if (again) again.focus();
+  });
   for (const [id, slot] of [["acc_face_top", "face_top"], ["acc_ear", "ear"]]) {
     $(id).add(new Option("해당사항 없음", ""));
     for (const name of Object.keys(BUFF_ITEMS[slot])) $(id).add(new Option(name, name));
