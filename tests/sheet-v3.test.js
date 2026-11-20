@@ -25,7 +25,7 @@ test("직업 패시브: 시트에서 바뀐 값이 들어 있다", () => {
   near(c["임모탈"].crit_s, 0.23); near(c["임모탈"].cd_base, 0.10);    // [진] 팬텀 소드 기본 포함
   near(c["리히터"].cd_s, 0.40); near(c["리히터"].cd_base, 0);
   near(c["셀레스티아"].boss, 0.25); near(c["프로피티스"].boss, 0.24); near(c["라디언트 소울"].boss, 0.18);
-  near(c["레이지 하츠"].cd_base, 0.21); near(c["레이지 하츠"].cd_final, 0.12);
+  near(c["레이지 하츠"].cd_base, 0.10); near(c["레이지 하츠"].cd_final, 0.12);   // 3.0.19는 0.21. 폭발하는 나소드 핸드(10%)는 시트 ver.3.0.22처럼 뺐다
   near(c["레버넌트"].hp_under, 0.034); near(c["코드:얼티메이트"].hp_under, 1.14 / 1.1 - 1, 9);
   near(c["템페스트 버스터"].crit_s, 0.21); near(c["템페스트 버스터"].maxi_s, 0.21);
   near(c["블러디 퀸"].cd_final, 0); near(c["블러디 퀸"].hp_crit_over, 0.15); near(c["블러디 퀸"].hp_crit_under, 0.25);
