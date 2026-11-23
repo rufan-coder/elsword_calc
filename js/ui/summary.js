@@ -117,7 +117,7 @@ export function renderSummary(ctx) {
       [["스탯창", trimPct(Math.min(win.aspd, ASPD.window_cap))], ...mults.map(x => [x.name, times(x.v)]), ["격려", times(ASPD.encourage) + " (격려 중)"]], ASPD_NOTE, seg]);
   }
   // 초목: 크뎀 곱연산 30%를 얻고 보뎀 한 칸을 뺐을 때. "사냥석 뺀 기준/힘트마 뺀 기준"
-  const chomok = chomokGain(win, job, resist, setup);
+  const chomok = (setup.item_cd || []).some(x => x.slot === "atma" && x.name === "초목의 아트마") ? null : chomokGain(win, job, resist, setup);   // 이미 초목이면 안 보여 준다
   if (chomok) tiles.push(["초목 효율", `${fmt(chomok.hunt)}/${fmt(chomok.atma)}`, "사냥석 -> 크리 / 힘트마 -> 크리", "chomok",
     "크뎀 곱연산 30%를 얻고 보뎀 사냥석(2.5%) 또는 힘트마(3%) 한 칸을 뺐을 때의 DPS 상승률"]);
   const html = tiles.length

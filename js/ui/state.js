@@ -11,7 +11,7 @@ import { TOWN_BUFFS } from "../data/buffs.js";
 export const STAT_IDS = ["crit", "crit_dmg", "maxi", "A", "A_max", "W", "boss", "all_skill", "cho", "gang", "share_cho", "polar", "add", "hp_over", "hp_under", "hp100",
   "adapt", "super_adapt", "cdr_gang", "cdr_cho", "aspd"];
 /** 버프 세팅 입력칸 */
-const SETUP_IDS = ["town", "yellow", "pants", "shoes", "enc_cdr", "enc_dur", "acc_face_top", "acc_ear", "acc_battle", "aspd_party"];
+const SETUP_IDS = ["town", "yellow", "pants", "shoes", "enc_cdr", "enc_dur", "acc_face_top", "acc_ear", "acc_battle", "acc_atma", "aspd_party"];
 /** 크극·소켓 최적화 탭의 입력칸 */
 const TOOL_IDS = ["ckb_boss", "ckb_min", "sk_neb", "sk_slots", "sk_boss_target", "sk_atma",
   ...STONES.map(s => "sk_per_" + s.key), "sk_cnt_empty", ...STONES.map(s => "sk_cnt_" + s.key)];
@@ -24,8 +24,8 @@ export const DEFAULTS = {
   share_cho: 95, polar: 59.2, add: 91.5, hp_over: 34, hp_under: 34, hp100: 41.5,
   adapt: 59, super_adapt: 10, cdr_gang: 32, cdr_cho: 32, aspd: "",
   town: "온천 버프", yellow: "1", pants: 11, shoes: 11,
-  enc_cdr: 30, enc_dur: 0, acc_face_top: "", acc_ear: "", acc_battle: "0", aspd_party: "1",
-  ckb_boss: "2.5", ckb_min: 25, sk_neb: "0", sk_slots: SLOT_BASE, sk_boss_target: "boss", sk_atma: "1",   // 힘트마 기준이면 아트마 사용은 O로 고정
+  enc_cdr: 30, enc_dur: 0, acc_face_top: "", acc_ear: "", acc_battle: "0", acc_atma: "", aspd_party: "1",
+  ckb_boss: "2.5", ckb_min: 0, sk_neb: "0", sk_slots: SLOT_BASE, sk_boss_target: "boss", sk_atma: "1",   // 힘트마 기준이면 아트마 사용은 O로 고정
   ...Object.fromEntries(STONES.map(s => ["sk_per_" + s.key, s.percent])),
   sk_cnt_crit: 12, sk_cnt_maxi: 8, sk_cnt_boss: 4, sk_cnt_boss2: 4, sk_cnt_cho: 10,
   // 옵션 비교 기본 목록: 자주 쓰는 마법석 + 시트 Main '옵션 효율표'처럼 스탯마다 1%
@@ -66,7 +66,7 @@ export function loadState(state) {
 
 /** 지금 화면 입력값 전체 */
 export function snapshot() {
-  const s = { v: VERSION, cls: $("cls").value, cls_skill: $("cls_skill").value, field: $("field").value, opts: readOptionRows() };
+  const s = { v: VERSION, ckb0: 1, cls: $("cls").value, cls_skill: $("cls_skill").value, field: $("field").value, opts: readOptionRows() };   // ckb0: 크리 최소 수치 기본값을 0으로 바꾼 뒤 저장했다는 표시
   for (const id of ALL_IDS) s[id] = $(id).value;
   return s;
 }
@@ -88,7 +88,8 @@ export function readSaved() {
     if (!("sk_cnt_crit" in saved)) for (const s of STONES) saved["sk_cnt_" + s.key] = "";   // 칸 수 대신 수치 합을 받던 때
     if (!("adapt" in saved)) for (const id of ["adapt", "super_adapt", "cdr_gang", "cdr_cho"]) saved[id] = "";   // 적응력·쿨감 칸이 없던 때 (예시 값이 섞이지 않게 비움)
     if (saved.town != null && !TOWN_BUFFS[saved.town]) saved.town = DEFAULTS.town;   // 목록에서 빠진 버프 (공존의 축제 등)
-    if (optsKey(saved.opts) === optsKey(OLD_DEFAULT_OPTS)) saved.opts = DEFAULTS.opts;   // 옵션 비교 기본 목록을 늘리기 전 그대로면 새 목록으로
+    if (optsKey(saved.opts) === optsKey(OLD_DEFAULT_OPTS)) saved.opts = DEFAULTS.opts;
+    if (!saved.ckb0 && String(saved.ckb_min) === "25") saved.ckb_min = DEFAULTS.ckb_min;   // 예전 기본값(25%) 그대로면 시트처럼 0으로 (한 번만)   // 옵션 비교 기본 목록을 늘리기 전 그대로면 새 목록으로
     return Object.assign({}, DEFAULTS, saved);
   } catch (e) { return null; }
 }

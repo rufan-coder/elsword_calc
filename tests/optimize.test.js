@@ -44,6 +44,39 @@ test("크극 최적화: 크극 스텟 합연 +20% 전직(리버레이터·라디
   }
 });
 
+// 시트 S9 의 극대 찾기 그대로: 크리마다 2^10, 2^9, ..., 1칸 점프로 극대 점수의 꼭짓점을 찾는다
+function sheetCkbJump(win, job, resist, setup, ratio) {
+  const step = 0.001, budget = statFromCrit(win.crit) + statFromMaxi(win.maxi) + win.boss / ratio, units = Math.floor(budget / step + 1e-9);
+  const fixed = 1 + setup.guild_boss + job.boss + (setup.town_boss || 0), maxcap = Math.min(1600, units);
+  const M = [];
+  for (let j = 0; j <= maxcap; j++) M[j] = maxiFactor(win, job, resist, setup, maxiFromStat(j * step));
+  const bossOf = used => fixed + Math.max(0, budget - step * used) * ratio;
+  const base = critFactor(win, job, resist, setup, win.crit) * maxiFactor(win, job, resist, setup, win.maxi) * (fixed + win.boss);
+  let best = -Infinity;
+  for (let i = 0; i <= Math.min(1400, units); i++) {
+    const limit = Math.min(maxcap, units - i), score = j => M[j] * bossOf(i + j);
+    let found = 0;
+    for (let jump = 1024; jump >= 1; jump /= 2) { const t = found + jump; if (t <= limit && score(t) > score(t - 1)) found = t; }
+    best = Math.max(best, critFactor(win, job, resist, setup, critFromStat(i * step)) * score(found));
+  }
+  return { gain: Math.max(0, best / base - 1) };
+}
+
+test("크극 최적화: 여러 전직·스탯·보뎀(낮은 보뎀 포함)·초목에서 시트 식과 같은 답이고, 시트의 극대 점프 찾기보다 낮지 않다", () => {
+  const { resist } = PICARO;
+  let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const names = ["트윈즈 피카로", "리버레이터", "나이트 엠퍼러", "블러디 퀸", "템페스트 버스터", "임모탈"];
+  for (let k = 0; k < 12; k++) {
+    const job = CLASS[names[k % names.length]], ratio = k % 2 ? 0.5 : 2.5 / 6;
+    const win = { ...PICARO.win, crit: 0.55 + 0.4 * rnd(), maxi: 0.45 + 0.45 * rnd(), boss: 0.6 + 1.6 * rnd(), crit_dmg: 1.6 + 0.6 * rnd() };
+    const setup = { ...PICARO.setup, cd_base_mults: PICARO.setup.cd_base_mults.concat(k % 3 === 0 ? [0.30] : []) };   // 셋에 하나는 초목
+    const r = optimizeCkb(win, job, resist, setup, { bossPer: ratio * 0.06, minCrit: 0 });
+    const s = sheetCkb(win, job, resist, setup, ratio), jmp = sheetCkbJump(win, job, resist, setup, ratio);
+    near(r.gain, s.gain, 12); near(r.crit, s.crit, 9); near(r.maxi, s.maxi, 9); near(r.boss, s.boss, 9);
+    assert.ok(r.gain >= jmp.gain - 1e-12, `${job.name}: ${r.gain} < ${jmp.gain}`);
+  }
+});
+
 test("크극·소켓 최적화: 마을 버프 보뎀은 길드 보뎀처럼 고정 몫으로 들어간다", () => {
   const { win, job, resist } = PICARO;
   const town = { ...PICARO.setup, town_boss: 0.02 }, guild = { ...PICARO.setup, guild_boss: PICARO.setup.guild_boss + 0.02 };

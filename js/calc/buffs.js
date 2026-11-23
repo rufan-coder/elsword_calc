@@ -2,6 +2,7 @@
 
 import { TOWN_BUFFS, ENHANCE_BASE_PERCENT, YELLOW_ARTIFACT, PARTY_CRIT_DAMAGE, GUILD_BOSS_DAMAGE, ENCOURAGE, BUFF_ITEMS } from "../data/buffs.js";
 import { aspdBuffs } from "./aspd.js";
+import { ATMA } from "../data/accessories.js";
 
 /**
  * 격려 가동률. 비전의 원석 수치(stoneCdr, stoneDur)는 성장 수치와 합연산된다.
@@ -34,9 +35,18 @@ export function buffItems(faceTop, ear, battle) {
   return out;
 }
 
+/** 아트마 세트의 크뎀 곱연산: [{ name, slot: "atma", v }] (유니크 기준. 크뎀 곱연이 없는 속성은 빈 목록) */
+export function atmaItems(element) {
+  const set = element && ATMA.sets[`${element}의 아트마`];
+  const v = set && set.cd_mult ? set.cd_mult[ATMA.maxGrade] : 0;
+  return v ? [{ name: `${element}의 아트마`, slot: "atma", v }] : [];
+}
+
 /**
  * 화면에서 고른 버프 세팅을 resolve()가 받는 setup으로 만든다.
- * choice: { town, pantsEnhance, shoesEnhance, yellow, stoneCdr, stoneDur, faceTop, ear, battle, party }
+ * choice: { town, pantsEnhance, shoesEnhance, yellow, stoneCdr, stoneDur, faceTop, ear, battle, party, atma }
+ *   atma : 아트마 세트 속성 ("유수" | "초목" | ""). 유니크 기준. 초목은 기본 크뎀 곱연산(유니크 30%)이 붙고,
+ *          유수는 최종 데미지라 스펙 계산에는 영향이 없다 (초목의 크리 -6%는 스탯창에 이미 보인다)
  *   party: 동작 속도 파티 기준이면 true (파티 동속 곱연산을 넣는다. 크뎀 파티 버프와는 상관없음)
  * 반환: { setup, detail } - detail은 화면에 "적용 값"으로 보여 주기 위한 중간 수치
  */
@@ -46,7 +56,7 @@ export function buildSetup(choice) {
   const pants = (ENHANCE_BASE_PERCENT + (choice.pantsEnhance || 0)) / 100;
   const shoes = (ENHANCE_BASE_PERCENT + (choice.shoesEnhance || 0)) / 100;
   const enc = encourage(choice.stoneCdr || 0, choice.stoneDur || 0);
-  const items = buffItems(choice.faceTop, choice.ear, choice.battle);
+  const items = buffItems(choice.faceTop, choice.ear, choice.battle).concat(atmaItems(choice.atma));
   const setup = {
     town_crit: town.crit, town_maxi: town.maxi, town_adapt: town.adapt || 0, town_boss: town.boss || 0, town_final: town.final || 0,
     crit_mults: [pants, yellow], maxi_mults: [shoes, yellow],

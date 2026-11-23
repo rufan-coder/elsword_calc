@@ -57,7 +57,7 @@ export function readInputs() {
     pantsEnhance: num("pants") || 0, shoesEnhance: num("shoes") || 0,
     stoneCdr: pctOrZero("enc_cdr"), stoneDur: pctOrZero("enc_dur"),
     faceTop: $("acc_face_top").value, ear: $("acc_ear").value, battle: num("acc_battle") || 0,
-    party: $("aspd_party").value === "1",
+    party: $("aspd_party").value === "1", atma: $("acc_atma").value,
   });
   setup.debuff = DUNGEONS[dungeon].debuff;   // 적응력 계산에 쓴다
   return { cls, job: withClassSkill(cls, $("cls_skill").value), dungeon, resist: DUNGEONS[dungeon].critResist, win, setup, town: $("town").value, buffs: detail, shareBlank: $("share_cho").value === "" };

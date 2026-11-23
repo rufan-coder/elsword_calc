@@ -26,6 +26,6 @@ export function renderCkb({ job, resist, win, setup }) {
         <li>크리·극대 소켓 6%와 보뎀 소켓 ${(bossPer * 100).toFixed(1)}%를 같은 한 칸으로 보고, 0.1% 단위로 전부 계산해서 고른 값이에요</li>
         <li>"바꿀 소켓 수치"는 마법석에 적힌 수치 기준이에요. 스탯창 숫자는 점감 때문에 그보다 덜 움직여요</li>
         <li>최적 배분에서 실전 평균 크확 ${fmt(r.critFinal, 1)}, 최종 극대화 ${fmt(r.maxiFinal, 1)}</li>
-        <li>크리티컬은 소켓 수치 ${(minCrit * 100).toFixed(0)}% 아래로는 내리지 않았어요 (장비 고유 옵션처럼 못 빼는 양)</li>
+        ${minCrit > 0 ? `<li>크리티컬은 소켓 수치 ${(minCrit * 100).toFixed(0)}% 아래로는 내리지 않았어요 (장비 고유 옵션처럼 못 빼는 양)</li>` : ""}
       </ul>`;
 }

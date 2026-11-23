@@ -127,3 +127,17 @@ test("버프형 아이템: 악세 세팅은 버프 세팅의 아이템 크뎀을
   const g0 = run(buildSetup({ ...base, battle: 0 }).setup).gain, g2 = run(buildSetup({ ...base, battle: 2 }).setup).gain;
   assert.ok(g2 > g0 + 0.005);
 });
+
+test("아트마 세트: 초목은 기본 크뎀 곱연 30%(유니크), 유수는 크뎀에 영향 없음. 초목이면 크극 최적화가 크리를 더 권한다", async () => {
+  const { atmaItems, buildSetup } = await import("../js/calc/buffs.js");
+  const { optimizeCkb } = await import("../js/calc/optimize-ckb.js");
+  assert.deepEqual(atmaItems("초목"), [{ name: "초목의 아트마", slot: "atma", v: 0.30 }]);
+  assert.deepEqual(atmaItems("유수"), []);
+  assert.deepEqual(atmaItems(""), []);
+  const base = { town: "온천 버프", pantsEnhance: 11, shoesEnhance: 11, yellow: true, stoneCdr: 0.3, stoneDur: 0 };
+  const job = CLASS["트윈즈 피카로"], win = { crit: 0.83, crit_dmg: 1.994, maxi: 0.6512, A: 124266, A_max: 169166, boss: 1.9 };
+  const plain = buildSetup(base).setup, cho = buildSetup({ ...base, atma: "초목" }).setup;
+  near(resolve(win, job, 0.30, cho).crit_dmg - resolve(win, job, 0.30, plain).crit_dmg, 1.5 * 1.1 * 0.30, 12);   // 파티 10%와 곱해진다
+  const a = optimizeCkb(win, job, 0.30, plain, { bossPer: 0.025, minCrit: 0 }), b = optimizeCkb(win, job, 0.30, cho, { bossPer: 0.025, minCrit: 0 });
+  near(a.crit, 0.83, 4); near(b.crit, 0.8916, 4);
+});

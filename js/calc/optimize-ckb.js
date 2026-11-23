@@ -9,6 +9,8 @@ const STEP = 0.001;   // 소켓 수치 0.1% 단위로 탐색
 /**
  * 크리·극대 마법석 한 칸(6%)과 보뎀 마법석 한 칸(bossPer)을 같은 값으로 보고,
  * 지금 가진 소켓 수치의 총량을 유지하면서 세 스탯에 다시 나눈 모든 경우를 계산해 가장 좋은 배분을 고른다.
+ * 시트 ver.3.0.19 Main '크리·극대·보뎀 최적화'(S9)와 같은 식이다. 시트는 크리마다 극대의 꼭짓점을 점프로 찾고, 여기는 크리 x 극대를 전부 본다.
+ * 시트에 없는 제한은 opt.minCrit(사용자가 넣은 크리 최소 수치) 하나뿐이고, 기본값 0이면 시트와 같다.
  *
  * 크리 배율은 크리 수치에만, 극대 배율은 극대 수치에만 달려 있어서 각각 미리 표로 만들어 두면
  * 두 겹 반복문(약 200만 가지)도 곱셈만으로 끝난다.
@@ -22,7 +24,6 @@ export function optimizeCkb(win, job, critResist, setup, opt) {
   const sc0 = statFromCrit(win.crit), sm0 = statFromMaxi(win.maxi), b0 = win.boss;
   const pool = sc0 + sm0 + rate * b0;                   // 나눠 쓸 수 있는 총량 (크리·극대 수치 기준)
   const bossFixed = setup.guild_boss + c.boss + (setup.town_boss || 0);   // 길드·전직 패시브·마을 버프 보뎀 (소켓으로 못 바꾸는 몫)
-  const bossMin = Math.min(b0, 0.6);                    // 장비 고유 보뎀 등 소켓이 아닌 몫은 남겨 둔다
   const iMin = Math.max(0, Math.ceil(Math.min(sc0, opt.minCrit || 0) / STEP - 1e-9));
   // 최종 확률이 100%에 닿은 뒤로는 더 넣어도 의미가 없으므로 거기까지만 본다
   const iMax = Math.max(iMin, Math.ceil((1.4 - setup.town_crit - c.crit_s) / STEP));
@@ -39,7 +40,7 @@ export function optimizeCkb(win, job, critResist, setup, opt) {
     const rest = pool - i * STEP, fc = critTable[i];
     for (let j = 0; j <= jMax; j++) {
       const boss = (rest - j * STEP) / rate;
-      if (boss < bossMin) break;                        // 극대에 더 넣을수록 보뎀이 줄어드므로 여기서 끝
+      if (boss < 0) break;                              // 극대에 더 넣을수록 보뎀이 줄어드므로 여기서 끝 (시트처럼 보뎀 하한은 따로 두지 않는다)
       const value = fc * maxiTable[j] * (1 + bossFixed + boss);
       if (value > best.value) best = { value, sc: i * STEP, sm: j * STEP, boss };
     }
