@@ -10,6 +10,8 @@
 //     avatarSets: [세트 이름...] | null   무악 세트를 4개 이상 맞췄을 때 켜 둔 세트 (null 이면 자동)
 //     town:    마을 버프 이름 | null      바꿔 볼 마을 버프 (null 이면 스펙 계산에서 고른 버프 그대로)
 //     spirit:  0~2 | null                 아티팩트 정령석 중 양극화로 고른 개수 (나머지는 물마). null 이면 입력 안 함
+//     equip:   { top, bottom, gloves, shoes, set } | null   방어구. 부위마다 { type: "네블론", enh: 강화, ref: 재련 } 또는 null,
+//              set: 4세트 이름 (js/data/equipment.js 의 ARMOR_SETS). 지금 방어구를 넣은 부위만 계산한다
 //   }
 //
 // 계산 방법
@@ -17,6 +19,8 @@
 //     바꾼 뒤 스탯창 = 지금 스탯창 - 지금 장비의 "보이는 효과" + 바꾼 장비의 "보이는 효과"
 //   곱연 크뎀과 최종 데미지는 스탯창에 안 보이므로 양쪽 모두 따로 곱해서 비교한다.
 //   글리터의 훈장의 곱연 크뎀은 버프 세팅의 배틀·클래식 카트리지 개수(setup.glitter_battle)를 따른다.
+//   방어구의 하의·신발 강화(크리·극대 곱연산)는 버프 세팅의 하의·신발 강화 수치를 바뀐 강화 차이만큼 옮겨서 센다.
+//   방어구 고정 공격력(재련)은 다른 고정 공격력처럼 계산하지 않는다.
 
 import { ACCESSORIES, NEW_ACCESSORIES, ARMOR_AVATARS, WEAPON_AVATARS, OUTFITS, WEAPONS, SETS, ATMA, AVATAR_SET_LIMIT, SPIRIT_STONES } from "../data/accessories.js";
 import { critFromStat, statFromCrit, maxiFromStat, statFromMaxi } from "./diminish.js";
@@ -24,6 +28,7 @@ import { resolve, dpsIndex, has } from "./stats.js";
 import { setupWithTown, buffItems } from "./buffs.js";
 import { BUFF_ITEMS } from "../data/buffs.js";
 import { CRIT_MAXI_PER_SLOT } from "../data/stones.js";
+import { ARMOR_TYPES, ARMOR_PART_ENHANCE, ARMOR_SETS } from "../data/equipment.js";
 
 const ACC_BY_NAME = new Map([...ACCESSORIES, ...NEW_ACCESSORIES].map(a => [a.name, a]));
 const WAVATAR_BY_NAME = new Map(WEAPON_AVATARS.map(w => [w.name, w]));
@@ -42,8 +47,71 @@ export const STAT_NAMES = {
 
 export const emptyGear = () => ({
   avatar: {}, normal: {}, outfit: null, wavatar: null, weapon: null, armor: {},
-  atma: { element: "유수", grades: {} }, avatarSets: null, town: null, spirit: null,
+  atma: { element: "유수", grades: {} }, avatarSets: null, town: null, spirit: null, equip: null,
 });
+
+// ----- 방어구 (엑사스케일·테네브로스·네블론) -----
+export const EQUIP_PARTS = ["top", "bottom", "gloves", "shoes"];
+/** 장비 데이터의 효과 묶음 -> 계산용 (강렬·초월 각각, 고정 공격력은 뺀다). 같은 묶음은 같은 객체로 돌려준다 (prepared 캐시) */
+const EQUIP_STATS = new Map();
+function equipStats(stats) {
+  if (!EQUIP_STATS.has(stats)) {
+    const out = {};
+    for (const [k, v] of Object.entries(stats || {})) {
+      if (k === "fixed_atk") continue;
+      if (k === "cho_gang") { out.cho = (out.cho || 0) + v; out.gang = (out.gang || 0) + v; }
+      else out[k] = (out[k] || 0) + v;
+    }
+    EQUIP_STATS.set(stats, out);
+  }
+  return EQUIP_STATS.get(stats);
+}
+const PART_STATS = new Map();
+const partStat = (key, v) => { const k = key + v; if (!PART_STATS.has(k)) PART_STATS.set(k, { [key]: v }); return PART_STATS.get(k); };
+
+/**
+ * 방어구 효과를 더한다. 부위마다 강화·재련 효과, 부위 강화 효과(상의 최종뎀, 장갑 모스뎀, 하의·신발은 partMult 로 따로), 4세트 효과.
+ * acc 에 equipSet({ name, active }), nebulon(네블론 부위 수), fixedAtk(고정 공격력 합, 계산 안 함), partMult({ crit, maxi }) 를 남긴다
+ */
+function addEquip(acc, equip, atkType) {
+  acc.equipSet = null; acc.nebulon = 0; acc.fixedAtk = 0; acc.partMult = {};
+  if (!equip) return;
+  const P = ARMOR_PART_ENHANCE;
+  for (const part of EQUIP_PARTS) {
+    const e = equip[part], t = e && ARMOR_TYPES[e.type];
+    if (!t) continue;
+    const enh = t.enhance[e.enh] || {}, ref = t.reforge[e.ref] || {};
+    addStats(acc, equipStats(enh), atkType);
+    addStats(acc, equipStats(ref), atkType);
+    acc.fixedAtk += ref.fixed_atk || 0;
+    if (t.nebulon) acc.nebulon++;
+    if (part === "top") acc.finals.push(P.top.final.base + P.top.final.per * e.enh);
+    if (part === "gloves") addStats(acc, partStat("all_skill", P.gloves.all_skill.base + P.gloves.all_skill.per * e.enh), atkType);
+    if (part === "bottom") acc.partMult.crit = P.bottom.crit_mult.base + P.bottom.crit_mult.per * e.enh;
+    if (part === "shoes") acc.partMult.maxi = P.shoes.maxi_mult.base + P.shoes.maxi_mult.per * e.enh;
+  }
+  const set = equip.set && ARMOR_SETS[equip.set];
+  if (set) {
+    const active = EQUIP_PARTS.every(p => equip[p] && set.armor.includes(equip[p].type));
+    acc.equipSet = { name: equip.set, active };
+    if (active) {
+      addStats(acc, set.visible, atkType);
+      if (set.hidden.final) acc.finals.push(set.hidden.final);
+    }
+  }
+}
+
+/** 하의·신발 강화가 바뀐 만큼 버프 세팅의 하의 크리·신발 극대 곱연산(crit_mults[0], maxi_mults[0])을 옮긴다 */
+function withPartEnhance(st, fx, before) {
+  const a = fx.partMult || {}, b = before.partMult || {};
+  const dc = a.crit != null && b.crit != null ? a.crit - b.crit : 0;
+  const dm = a.maxi != null && b.maxi != null ? a.maxi - b.maxi : 0;
+  if (Math.abs(dc) < 1e-12 && Math.abs(dm) < 1e-12) return st;
+  return Object.assign({}, st, {
+    crit_mults: [(st.crit_mults[0] || 0) + dc, ...st.crit_mults.slice(1)],
+    maxi_mults: [(st.maxi_mults[0] || 0) + dm, ...st.maxi_mults.slice(1)],
+  });
+}
 
 /** 아티팩트 정령석 효과: 양극화로 고른 개수(0~2)마다 하나씩 만들어 둔다 (prepared 가 묶음 단위로 기억하므로) */
 const SPIRIT_FX = Array.from({ length: SPIRIT_STONES.count + 1 }, (_, n) => {
@@ -168,6 +236,7 @@ export function gearEffects(gear, atkType, avatarChoice, ignore, battle = null) 
     else if (set) acc.unknown.push(`${set} (레어 아바타)`);
   }
   if (gear.spirit != null && SPIRIT_FX[gear.spirit]) addStats(acc, SPIRIT_FX[gear.spirit], atkType);
+  addEquip(acc, gear.equip, atkType);
 
   // 세트 효과. 무악 세트는 AVATAR_SET_LIMIT 개까지만
   const all = setStages(countSets(gear), ignore);
@@ -307,21 +376,22 @@ export function gearScorer(ctx, beforeGear, { ignoreSets = null } = {}) {
     };
   }
   /** 효과 묶음 -> 바뀐 스탯창(shifted: 장비만, real: 소켓 교체까지)과 DPS 지수. exact 면 소켓 기준을 쓰지 않는다 */
-  const settle = (fx, st, exact) => {
+  const settle = (fx, st0, exact) => {
+    const st = withPartEnhance(st0, fx, before);   // 방어구 하의·신발 강화가 바뀌었으면 크리·극대 곱연산도
     const delta = minus(fx.visible, before.visible), shifted = shiftWindow(win, delta);
     const dpsOf = w => dps(w, job, resist, st, fx);
-    if (!sockets || exact) return { shifted, real: shifted.win, value: dpsOf(shifted.win), swaps: [], dropped: [] };
-    return Object.assign({ shifted }, settleSockets(win, shifted.win, delta, dpsOf, sockets));
+    if (!sockets || exact) return { shifted, real: shifted.win, value: dpsOf(shifted.win), swaps: [], dropped: [], setup: st };
+    return Object.assign({ shifted, setup: st }, settleSockets(win, shifted.win, delta, dpsOf, sockets));
   };
   const valueOf = (fx, g) => settle(fx, setupFor(g)).value / baseDps;
   const afterFor = (g, choice, exact) => {
-    const fx = gearEffects(g, atkType, choice, ignoreSets, battle), st = setupFor(g), r = settle(fx, st, exact);
-    return { fx, shifted: r.shifted, real: r.real, swaps: r.swaps, dropped: r.dropped, setup: st, value: r.value / baseDps };
+    const fx = gearEffects(g, atkType, choice, ignoreSets, battle), r = settle(fx, setupFor(g), exact);
+    return { fx, shifted: r.shifted, real: r.real, swaps: r.swaps, dropped: r.dropped, setup: r.setup, value: r.value / baseDps };
   };
   // 바꾼 쪽은 사용자가 고르지 않았으면 가장 좋은 무악 세트 조합을 고른다 (켤 세트는 소켓 기준 없이 정확한 값으로 고른다)
   const evaluate = g => afterFor(g, g.avatarSets || bestAvatarChoice(g, names => afterFor(g, names, true).value, ignoreSets));
   /** 효과 묶음을 반영한 스탯창(소켓 교체까지)과 버프 (자동 찾기가 상한 초과를 잴 때 쓴다) */
-  const windowOf = (fx, g) => ({ win: settle(fx, setupFor(g)).real, setup: setupFor(g) });
+  const windowOf = (fx, g) => { const r = settle(fx, setupFor(g)); return { win: r.real, setup: r.setup }; };
   return { before, evaluate, valueOf, windowOf };
 }
 

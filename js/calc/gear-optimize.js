@@ -114,7 +114,7 @@ function variables(atkType, battle) {
 const clone = g => ({
   avatar: { ...g.avatar }, normal: { ...g.normal }, outfit: g.outfit || null, wavatar: g.wavatar || null, weapon: g.weapon || null,
   armor: { ...g.armor }, atma: { element: g.atma.element, grades: { ...g.atma.grades } }, avatarSets: null, town: g.town || null,
-  spirit: g.spirit == null ? null : g.spirit,
+  spirit: g.spirit == null ? null : g.spirit, equip: g.equip || null,   // 방어구는 자동 찾기가 바꾸지 않는다 (같은 객체를 같이 쓴다)
 });
 const validRings = g => !g.normal.ring || g.normal.ring !== g.normal.ring2;
 const setOf = name => { const a = ACCESSORIES.find(x => x.name === name) || WEAPON_AVATARS.find(x => x.name === name); return a && !a.atma && a.set !== "없음" ? a.set : null; };
@@ -244,7 +244,7 @@ export function optimizeGear(ctx, now, opts = {}) {
   const towns = opts.towns || townsToTry(ctx, opts.locked);
   let evals = 0, plans = 0;
   const byTown = sortByTown(towns.map(town => {
-    const r = searchOne(ctx, now, Object.assign(clone(now), { town }), opts);
+    const r = searchOne(ctx, now, Object.assign(clone(now), { town }, opts.equip !== undefined ? { equip: opts.equip } : {}), opts);   // opts.equip: 바꿔 볼 방어구로 찾기
     evals += r.evals; plans += r.plans;
     return Object.assign(r, { town: town || current });
   }));
@@ -328,9 +328,9 @@ function searchOne(ctx, now, start, { locked = [], cdrTarget = null, plans: keep
     const fx = scorer.evaluate(g).fx, v0 = scorer.valueOf(fx, g), d = 0.01, w = {};
     const overOf = f => { const x = scorer.windowOf(f, g); return overTotal(x.win, x.setup, ctx.job, ctx.resist); }, o0 = overOf(fx);
     for (const k of KEYS) {
-      const fx1 = k === "cd_mult" ? { visible: fx.visible, cdMults: fx.cdMults.concat([d]), finals: fx.finals }
-        : k === "final" ? { visible: fx.visible, cdMults: fx.cdMults, finals: fx.finals.concat([d]) }
-        : { visible: { ...fx.visible, [k]: (fx.visible[k] || 0) + d }, cdMults: fx.cdMults, finals: fx.finals };
+      const fx1 = k === "cd_mult" ? { ...fx, cdMults: fx.cdMults.concat([d]) }
+        : k === "final" ? { ...fx, finals: fx.finals.concat([d]) }
+        : { ...fx, visible: { ...fx.visible, [k]: (fx.visible[k] || 0) + d } };
       // 상한을 넘기는 스탯은 넘치는 만큼 깎는다 (정확한 계산의 value 와 같은 기준)
       w[k] = (scorer.valueOf(fx1, g) / v0 - 1) / d - OVER_PENALTY * (overOf(fx1) - o0) / d;
     }

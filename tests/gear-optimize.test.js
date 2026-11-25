@@ -193,3 +193,12 @@ test("상한 초과: DPS가 같으면 넘치는 것이 적은 쪽을 고른다",
   near(r.gain, 0, 12);
   assert.equal(typeof r.over, "number"); near(r.overNow - r.over, 0.04, 9);
 });
+
+test("자동 찾기: 방어구는 바꾸지 않고, 바꿔 볼 방어구(opts.equip)를 끼운 채로 찾는다", () => {
+  const EQ = type => Object.fromEntries(["top", "bottom", "gloves", "shoes"].map(p => [p, { type, enh: 12, ref: 21 }]).concat([["set", "연산"]]));
+  const now = Object.assign(structuredClone(NOW), { equip: EQ("엑사스케일") });
+  const r = optimizeGear(ctx, now, { equip: EQ("네블론") });
+  assert.equal(r.gear.equip.top.type, "네블론");
+  near(gearScorer(ctx, now).evaluate(r.gear).value - 1, r.gain, 12);
+  assert.equal(optimizeGear(ctx, now).gear.equip.top.type, "엑사스케일");   // 안 주면 지금 방어구 그대로
+});

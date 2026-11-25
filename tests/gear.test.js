@@ -103,3 +103,49 @@ test("크리·극대 소켓 기준: 소켓(6%)을 바꿔 이득일 때만 크리
   assert.deepEqual(r.dropped, ["crit"]); assert.deepEqual(r.swaps, []);
   assert.ok(Math.abs(r.win.crit - compare(exact, empty(), Object.assign(empty(), { avatar: { top: "비룡승운 : 호걸의 긍지" } })).win.crit) < 1e-12);   // 스탯창에는 오른 크리 그대로
 });
+
+// ----- 방어구 -----
+const EQ = (type, enh, ref, set = null) => ({ top: { type, enh, ref }, bottom: { type, enh, ref }, gloves: { type, enh, ref }, shoes: { type, enh, ref }, set });
+
+test("방어구: 엑사스케일 → 네블론 (4부위 12강 21재련) 은 적응력 -4%, 초적응력 +10%, 크뎀 -12%, 공격력% +4%", () => {
+  const r = compareGear(ctx, gear({ equip: EQ("엑사스케일", 12, 21, "연산") }), gear({ equip: EQ("네블론", 12, 21, "연산") }));
+  const d = Object.fromEntries(Object.entries(r.delta).filter(([, v]) => Math.abs(v) > 1e-12));
+  assert.deepEqual(Object.keys(d).sort(), ["adapt", "atk_pct", "crit_dmg", "super_adapt"]);
+  near(d.adapt, -0.04, 12); near(d.super_adapt, 0.10, 12); near(d.crit_dmg, -0.12, 12); near(d.atk_pct, 0.04, 12);
+  assert.deepEqual(r.hidden.final[0], r.hidden.final[1]);   // 상의 강화(최종뎀)·연산 세트는 그대로
+  assert.deepEqual([r.after.nebulon, r.before.nebulon], [4, 0]);
+});
+
+test("방어구: 부위 강화 효과 (상의 최종뎀, 장갑 모스뎀) 와 강렬·초월 재련", () => {
+  const fx = gearEffects(gear({ equip: { top: { type: "엑사스케일", enh: 12, ref: 21 }, gloves: { type: "엑사스케일", enh: 11, ref: 0 }, set: null } }), "물리");
+  assert.deepEqual(fx.finals.map(x => +x.toFixed(6)), [0.14]);
+  near(fx.visible.all_skill, 0.55, 12);
+  near(fx.visible.cho, 0.10, 12); near(fx.visible.gang, 0.10, 12);
+  assert.equal(fx.fixedAtk, 2000);                           // 고정 공격력은 따로 모아 두기만 한다
+});
+
+test("방어구: 4세트는 4부위가 모두 그 세트를 쓸 수 있는 방어구일 때만 켜진다", () => {
+  const on = gearEffects(gear({ equip: EQ("네블론", 0, 0, "연산") }), "물리");
+  assert.deepEqual(on.equipSet, { name: "연산", active: true });
+  assert.deepEqual(on.finals.map(x => +x.toFixed(6)), [0.02, 0.2]);   // 상의 0강 2% + 연산 20%
+  near(on.visible.adapt, 0.02, 12);
+  const mixed = EQ("네블론", 0, 0, "연산"); mixed.gloves = { type: "테네브로스", enh: 0, ref: 0 };
+  assert.equal(gearEffects(gear({ equip: mixed }), "물리").equipSet.active, false);
+  const three = EQ("네블론", 0, 0, "연산"); three.shoes = null;
+  assert.equal(gearEffects(gear({ equip: three }), "물리").equipSet.active, false);
+  const tene = gearEffects(gear({ equip: EQ("테네브로스", 0, 0, "테네브로스-(속저 모스뎀)") }), "마법");
+  near(tene.visible.atk_pct, 0.05, 12);
+});
+
+test("방어구: 하의·신발 강화가 바뀌면 버프 세팅의 하의 크리·신발 극대 곱연산을 그만큼 옮긴다", () => {
+  const one = (part, enh) => gear({ equip: { [part]: { type: "네블론", enh, ref: 0 }, set: null } });
+  const base = resolve(ctx.win, ctx.job, ctx.resist, ctx.setup);
+  const r = compareGear(ctx, one("bottom", 12), one("bottom", 13));   // 12강·13강은 강화 효과(보뎀·초적응)가 같다
+  const s2 = { ...ctx.setup, crit_mults: [ctx.setup.crit_mults[0] + 0.01, ...ctx.setup.crit_mults.slice(1)] };
+  near(r.gain, dpsIndex(resolve(ctx.win, ctx.job, ctx.resist, s2)) / dpsIndex(base) - 1, 10);
+  near(r.setup.crit_mults[0], ctx.setup.crit_mults[0] + 0.01, 12);
+  const m = compareGear(ctx, one("shoes", 12), one("shoes", 9));
+  near(m.setup.maxi_mults[0], ctx.setup.maxi_mults[0] - 0.03, 12);
+  // 지금 방어구를 안 넣은 부위는 옮기지 않는다
+  near(compareGear(ctx, gear(), one("bottom", 12)).setup.crit_mults[0], ctx.setup.crit_mults[0], 12);
+});
