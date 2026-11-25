@@ -185,3 +185,32 @@ test("방어구: 네블론 부위가 늘면 늘어난 소켓에 가장 좋은 �
   assert.deepEqual(down.swaps.map(x => [x.k, x.dir]), [["slot", -1]]);
   assert.deepEqual(compareGear(c, one("네블론"), one("네블론")).swaps, []);
 });
+
+test("방어구: 네블론 카트리지는 같은 종류면 가장 높은 레벨 하나만 세고, 보이는 효과와 오버플로우 최종 데미지를 넣는다", () => {
+  const neb = cart => ({ type: "네블론", enh: 0, ref: 0, cart });
+  const eq = (...carts) => ({ top: neb(carts[0]), bottom: neb(carts[1]), gloves: neb(carts[2]), shoes: neb(carts[3]), set: null });
+  const fx = e => gearEffects(gear({ equip: e }), "물리");
+  const base = fx(eq(null, null, null, null));
+  const a = fx(eq({ name: "배틀 카트리지 Type - 4", lv: 6 }, { name: "배틀 카트리지 Type - 4", lv: 2 }, { name: "배틀 카트리지 Type - 3", lv: 4 }, { name: "하이퍼 카트리지 [오버플로우]", lv: 3 }));
+  near(a.visible.crit_dmg - (base.visible.crit_dmg || 0), 0.03, 12);   // 배틀 4 Lv6 하나만 (Lv2는 안 셈)
+  near(a.visible.cho - (base.visible.cho || 0), 0.02, 12); near(a.visible.gang - (base.visible.gang || 0), 0.02, 12);
+  assert.deepEqual(a.finals.slice().sort(), base.finals.concat([0.015]).sort());   // 오버플로우 Lv3 최종 1.5%
+  assert.deepEqual(a.cartridges.counts, { hyper: 1, support: 0, battle: 2 });
+  const u = fx(eq({ name: "하이퍼 카트리지 [앰플리파이어]", lv: 6 }, { name: "서포트 카트리지 Type - 1", lv: 6 }, null, null));
+  assert.deepEqual(u.unknown, ["하이퍼 카트리지 [앰플리파이어]"]);   // 수치 모름 -> 효과 없이
+  assert.deepEqual(u.visible, base.visible); assert.deepEqual(u.finals, base.finals);   // 서포트 1은 서포터 전용
+  assert.deepEqual(u.cartridges.counts, { hyper: 1, support: 1, battle: 0 });         // 개수에는 들어간다
+});
+
+test("방어구: 네블론이 있으면 글리터의 훈장은 그 카트리지 개수로 (곱연 크뎀: 배틀·클래식, 최종 데미지: 하이퍼·서포트)", () => {
+  const neb = cart => ({ type: "네블론", enh: 0, ref: 0, cart });
+  const g = (...carts) => gear({ normal: { ear: "글리터의 훈장" }, equip: { top: neb(carts[0]), bottom: neb(carts[1]), gloves: neb(carts[2] || null), shoes: neb(carts[3] || null), set: null } });
+  const two = gearEffects(g({ name: "배틀 카트리지 Type - 4", lv: 6 }, { name: "클래식 카트리지 Type - 1", lv: 6 }, { name: "하이퍼 카트리지 [엑셀레이션]", lv: 6 }, { name: "하이퍼 카트리지 [뮤테이션]", lv: 6 }), "물리", null, null, 0);
+  assert.deepEqual(two.cdMults, [0.01]);                              // 배틀·클래식 2개 (버프 세팅의 0개 대신)
+  assert.ok(two.finals.some(f => Math.abs(f - (1.06 * 1.03 * 1.01 - 1)) < 1e-6));   // 하이퍼 2개
+  const none = gearEffects(g(null, null), "물리", null, null, 2);
+  assert.deepEqual(none.cdMults, []);                                 // 네블론에 카트리지가 없으면 0개
+  assert.ok(none.finals.some(f => Math.abs(f - (1.06 * 1.03 - 1)) < 1e-6));
+  const exa = gearEffects(gear({ normal: { ear: "글리터의 훈장" } }), "물리", null, null, 2);
+  assert.deepEqual([exa.cdMults, exa.finals], [[0.01], [0.0973]]);    // 네블론이 없으면 지금처럼 버프 세팅 개수·아이템 값
+});

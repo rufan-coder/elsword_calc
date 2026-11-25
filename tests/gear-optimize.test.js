@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { optimizeGear, LOCKABLE, OVER_PENALTY, overTotal } from "../js/calc/gear-optimize.js";
+import { optimizeGear, LOCKABLE, OVER_PENALTY, overTotal, lockFrom, townsToTry } from "../js/calc/gear-optimize.js";
 import { gearScorer, gearEffects, emptyGear, compareGear } from "../js/calc/gear.js";
 import { buildSetup } from "../js/calc/buffs.js";
 import { resolve } from "../js/calc/stats.js";
@@ -201,4 +201,20 @@ test("자동 찾기: 방어구는 바꾸지 않고, 바꿔 볼 방어구(opts.eq
   assert.equal(r.gear.equip.top.type, "네블론");
   near(gearScorer(ctx, now).evaluate(r.gear).value - 1, r.gain, 12);
   assert.equal(optimizeGear(ctx, now).gear.equip.top.type, "엑사스케일");   // 안 주면 지금 방어구 그대로
+});
+
+test("자동 찾기: 고정한 칸은 start(화면에서는 \"바꿔 보기\")의 것을 그대로 두고 찾고, DPS 변화는 지금 기준", () => {
+  const now = Object.assign(structuredClone(NOW), { normal: { ...NOW.normal, bottom: "글로잉 플라워" } });
+  const want = Object.assign(structuredClone(now), { normal: { ...now.normal, bottom: "영혼의 족쇄" } });
+  const locked = ["normal.bottom", "normal.weapon", "normal.support", "normal.ear", "normal.ring"];
+  const start = lockFrom(now, want, locked);
+  assert.equal(start.normal.bottom, "영혼의 족쇄");
+  assert.equal(lockFrom(now, want, ["normal.weapon"]).normal.bottom, "글로잉 플라워");   // 고정 안 한 칸은 지금 것
+  const r = optimizeGear(ctx, now, { locked, start });
+  assert.equal(r.gear.normal.bottom, "영혼의 족쇄");
+  near(gearScorer(ctx, now).evaluate(r.gear).value - 1, r.gain, 12);
+  assert.equal(optimizeGear(ctx, now, { locked }).gear.normal.bottom, "글로잉 플라워");   // start 가 없으면 지금 것
+  // 마을 버프를 고정하면 start 의 버프 하나만
+  assert.deepEqual(townsToTry({ ...ctx, town: "온천 버프" }, ["town"], { town: "엘 하우스(강화)" }), ["엘 하우스(강화)"]);
+  assert.deepEqual(townsToTry({ ...ctx, town: "온천 버프" }, ["town"], { town: null }), [null]);
 });

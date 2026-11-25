@@ -117,6 +117,25 @@ const clone = g => ({
   spirit: g.spirit == null ? null : g.spirit, equip: g.equip || null,   // 방어구는 자동 찾기가 바꾸지 않는다 (같은 객체를 같이 쓴다)
 });
 const validRings = g => !g.normal.ring || g.normal.ring !== g.normal.ring2;
+
+/**
+ * 고정한 칸만 src 의 것으로 바꾼 base 의 사본. 자동 찾기를 시작할 장착 상태를 만들 때 쓴다
+ * (화면에서 "고정" 칸은 "바꿔 보기"에 고른 것을 그대로 두고 찾는다: base = 지금, src = 바꿔 보기)
+ */
+export function lockFrom(base, src, locked = []) {
+  const n = clone(base);
+  for (const key of locked) {
+    const [layer, slot] = key.split(".");
+    if (slot && (layer === "avatar" || layer === "normal")) {
+      n[layer][slot] = src[layer][slot] || null;
+      if (layer === "normal" && ATMA_GRADED.includes(slot) && src.atma.grades[slot]) n.atma.grades[slot] = src.atma.grades[slot];
+    }
+    else if (key === "armor") n.armor = { ...src.armor };
+    else if (key === "element") n.atma.element = src.atma.element;
+    else if (key === "outfit" || key === "wavatar" || key === "town" || key === "spirit") n[key] = src[key] == null ? null : src[key];
+  }
+  return n;
+}
 const setOf = name => { const a = ACCESSORIES.find(x => x.name === name) || WEAPON_AVATARS.find(x => x.name === name); return a && !a.atma && a.set !== "없음" ? a.set : null; };
 const SET_OF = new Map([...ACCESSORIES, ...WEAPON_AVATARS].map(a => [a.name, setOf(a.name)]).filter(x => x[1]));
 
@@ -226,7 +245,8 @@ function bestPlans(slots, groups, limit, keep) {
  * 자동 찾기.
  * ctx    : { win, job, resist, setup, town } (compareGear 와 같다. town 은 스펙 계산에서 고른 마을 버프 이름)
  * now    : 지금 장착 상태 (gear.js 의 모양)
- * opts   : { locked: 고정할 칸 이름 목록 (LOCKABLE 참고. "town" 이면 마을 버프도 지금 그대로), towns: 따져 볼 마을 버프 (기본 townsToTry),
+ * opts   : { locked: 고정할 칸 이름 목록 (LOCKABLE 참고. "town" 이면 마을 버프도 그대로), towns: 따져 볼 마을 버프 (기본 townsToTry),
+ *            start: 찾기 시작할 장착 상태 (없으면 now). 고정한 칸은 이 상태의 것을 그대로 둔다 (lockFrom 으로 만든다),
  *            cdrTarget: 지킬 초월 쿨감 (0.32 = 32%, 없으면 null),
  *            plans: 정확히 계산해 볼 계획 수, rounds: 마지막에 무작위로 흔들어 볼 횟수, kicks: 한 번에 흔드는 최대 개수, seed }
  * 반환   : { gear, gain, score, over, overNow, cdr, cdrMet, evals, plans, byTown }
@@ -241,10 +261,11 @@ function bestPlans(slots, groups, limit, keep) {
  */
 export function optimizeGear(ctx, now, opts = {}) {
   const current = ctx.town && TOWN_BUFFS[ctx.town] ? ctx.town : null;
-  const towns = opts.towns || townsToTry(ctx, opts.locked);
+  const base = opts.start || now;
+  const towns = opts.towns || townsToTry(ctx, opts.locked, base);
   let evals = 0, plans = 0;
   const byTown = sortByTown(towns.map(town => {
-    const r = searchOne(ctx, now, Object.assign(clone(now), { town }, opts.equip !== undefined ? { equip: opts.equip } : {}), opts);   // opts.equip: 바꿔 볼 방어구로 찾기
+    const r = searchOne(ctx, now, Object.assign(clone(base), { town }, opts.equip !== undefined ? { equip: opts.equip } : {}), opts);   // opts.equip: 바꿔 볼 방어구로 찾기
     evals += r.evals; plans += r.plans;
     return Object.assign(r, { town: town || current });
   }));
@@ -252,10 +273,14 @@ export function optimizeGear(ctx, now, opts = {}) {
   return { gear: best.gear, gain: best.gain, score: best.score, over: best.over, overNow: best.overNow, cdr: best.cdr, cdrMet: best.cdrMet, evals, plans, byTown };
 }
 
-/** 따져 볼 마을 버프 목록 (null = 스펙 계산에서 고른 버프 그대로). 화면에서 버프 하나씩 나눠 돌릴 때 쓴다 */
-export function townsToTry(ctx, locked = []) {
+/**
+ * 따져 볼 마을 버프 목록 (null = 스펙 계산에서 고른 버프 그대로). 화면에서 버프 하나씩 나눠 돌릴 때 쓴다.
+ * 마을 버프를 고정했으면 start 의 버프 하나만 (start.town 이 없으면 지금 버프)
+ */
+export function townsToTry(ctx, locked = [], start = null) {
   const current = ctx.town && TOWN_BUFFS[ctx.town] ? ctx.town : null;
-  return locked.includes("town") || !current ? [null] : [null].concat(TOWN_CHOICES.filter(n => n !== current));
+  if (locked.includes("town")) return [start && start.town && start.town !== current ? start.town : null];
+  return !current ? [null] : [null].concat(TOWN_CHOICES.filter(n => n !== current));
 }
 
 /** 마을 버프별 결과 정렬: 쿨감 목표를 지킨 것 먼저, 그다음 점수(DPS - 상한 초과 몫) 순 (같으면 앞에 있던 것 = 지금 버프가 앞) */

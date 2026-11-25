@@ -12,6 +12,7 @@
 //     spirit:  0~2 | null                 아티팩트 정령석 중 양극화로 고른 개수 (나머지는 물마). null 이면 입력 안 함
 //     equip:   { top, bottom, gloves, shoes, set } | null   방어구. 부위마다 { type: "네블론", enh: 강화, ref: 재련, opts } 또는 null,
 //              opts: 네블론 옵션 변환 [{ name: ARMOR_REROLL 이름, step: 1~10 }, ...] (네블론만, 3줄까지)
+//              cart: 네블론 카트리지 { name: CARTRIDGES 이름, lv: 1~6 } 또는 null (네블론만)
 //              set: 4세트 이름 (js/data/equipment.js 의 ARMOR_SETS). 지금 방어구를 넣은 부위만 계산한다
 //   }
 //
@@ -20,6 +21,8 @@
 //     바꾼 뒤 스탯창 = 지금 스탯창 - 지금 장비의 "보이는 효과" + 바꾼 장비의 "보이는 효과"
 //   곱연 크뎀과 최종 데미지는 스탯창에 안 보이므로 양쪽 모두 따로 곱해서 비교한다.
 //   글리터의 훈장의 곱연 크뎀은 버프 세팅의 배틀·클래식 카트리지 개수(setup.glitter_battle)를 따른다.
+//   단 그쪽 장착에 네블론 방어구가 있으면 그 카트리지로 센다 (곱연 크뎀은 배틀·클래식, 최종 데미지는 하이퍼·서포트 개수).
+//   카트리지는 같은 종류면 가장 높은 레벨 하나만 센다. 서플라이·서포트 1·2는 서포터만 효과가 있어서 효과는 빼고 개수에만 넣는다.
 //   방어구의 하의·신발 강화(크리·극대 곱연산)는 버프 세팅의 하의·신발 강화 수치를 바뀐 강화 차이만큼 옮겨서 센다.
 //   방어구 고정 공격력(재련)은 다른 고정 공격력처럼 계산하지 않는다.
 //   네블론 방어구는 부위마다 소켓이 1칸 더 있다. 네블론 부위 수가 바뀌면 늘어난 칸에 크리 6%·극대 6%·ctx.slotStone 중
@@ -32,7 +35,7 @@ import { resolve, dpsIndex, has } from "./stats.js";
 import { setupWithTown, buffItems } from "./buffs.js";
 import { BUFF_ITEMS } from "../data/buffs.js";
 import { CRIT_MAXI_PER_SLOT } from "../data/stones.js";
-import { ARMOR_TYPES, ARMOR_PART_ENHANCE, ARMOR_SETS, ARMOR_REROLL } from "../data/equipment.js";
+import { ARMOR_TYPES, ARMOR_PART_ENHANCE, ARMOR_SETS, ARMOR_REROLL, CARTRIDGES } from "../data/equipment.js";
 
 const ACC_BY_NAME = new Map([...ACCESSORIES, ...NEW_ACCESSORIES].map(a => [a.name, a]));
 const WAVATAR_BY_NAME = new Map(WEAPON_AVATARS.map(w => [w.name, w]));
@@ -71,15 +74,46 @@ function equipStats(stats) {
   return EQUIP_STATS.get(stats);
 }
 const PART_STATS = new Map();
-const partStat = (key, v) => { const k = key + v; if (!PART_STATS.has(k)) PART_STATS.set(k, { [key]: v }); return PART_STATS.get(k); };
+const partStat = (key, v) => {
+  const k = key + v;
+  if (!PART_STATS.has(k)) PART_STATS.set(k, key === "cho_gang" ? { cho: v, gang: v } : { [key]: v });
+  return PART_STATS.get(k);
+};
+
+/**
+ * 네블론 카트리지: { has: 네블론 부위가 있는지, best: 종류 -> 가장 높은 레벨, counts: 글리터의 훈장 개수 { hyper, support, battle } (서로 다른 종류, 최대 2) }
+ */
+export function equipCartridges(equip) {
+  const best = new Map(), counts = { hyper: 0, support: 0, battle: 0 };
+  let has = false;
+  if (equip) for (const part of EQUIP_PARTS) {
+    const e = equip[part], t = e && ARMOR_TYPES[e.type];
+    if (!t || !t.nebulon) continue;
+    has = true;
+    if (e.cart && CARTRIDGES[e.cart.name]) best.set(e.cart.name, Math.max(best.get(e.cart.name) || 0, e.cart.lv));
+  }
+  for (const name of best.keys()) {
+    const g = CARTRIDGES[name].group, k = g === "battle-classic" ? "battle" : g;
+    counts[k] = Math.min(2, counts[k] + 1);
+  }
+  return { has, best, counts };
+}
 
 /**
  * 방어구 효과를 더한다. 부위마다 강화·재련 효과, 부위 강화 효과(상의 최종뎀, 장갑 모스뎀, 하의·신발은 partMult 로 따로), 4세트 효과.
  * acc 에 equipSet({ name, active }), nebulon(네블론 부위 수), fixedAtk(고정 공격력 합, 계산 안 함), partMult({ crit, maxi }) 를 남긴다
  */
-function addEquip(acc, equip, atkType) {
-  acc.equipSet = null; acc.nebulon = 0; acc.fixedAtk = 0; acc.partMult = {};
+function addEquip(acc, equip, atkType, cart = equipCartridges(equip)) {
+  acc.equipSet = null; acc.nebulon = 0; acc.fixedAtk = 0; acc.partMult = {}; acc.cartridges = cart;
   if (!equip) return;
+  // 카트리지 (같은 종류는 가장 높은 레벨 하나). 수치를 모르는 것은 효과 없이, 서포터 전용은 효과를 뺀다
+  for (const [name, lv] of cart.best) {
+    const def = CARTRIDGES[name];
+    if (def.unknown) { acc.unknown.push(name); continue; }
+    if (def.supporterOnly) continue;
+    for (const [k, arr] of Object.entries(def.visible || {})) addStats(acc, partStat(k, arr[lv - 1]), atkType);
+    if (def.hidden && def.hidden.final) acc.finals.push(def.hidden.final[lv - 1]);
+  }
   const P = ARMOR_PART_ENHANCE;
   for (const part of EQUIP_PARTS) {
     const e = equip[part], t = e && ARMOR_TYPES[e.type];
@@ -160,18 +194,23 @@ function prepared(stats, atkType) {
 
 /**
  * 일반 악세의 능력치. 곱연 크뎀이 카트리지 개수에 따라 바뀌는 것(글리터의 훈장)은 battle 개수의 값으로 바꾼다.
+ * glitter({ hyper, support }) 를 주면 글리터의 훈장 최종 데미지도 그 개수로 바꾼다.
  * battle 이 null 이면 데이터 값 그대로 (카트리지 2개 이상과 같음). 같은 묶음을 돌려줘야 prepared()의 캐시가 맞아서 개수별로 한 번만 만든다.
  */
 const BY_BATTLE = new Map();
-export function itemStats(a, battle) {
-  const e = battle != null && a.layer === "normal" && (BUFF_ITEMS[a.slot] || {})[a.name];
+export function itemStats(a, battle, glitter = null) {
+  const e = (battle != null || glitter) && a.layer === "normal" && (BUFF_ITEMS[a.slot] || {})[a.name];
   if (!e || !e.cd_mult_by_battle) return a.stats;
-  const key = `${a.name}|${battle}`;
+  const key = `${a.name}|${battle}|${glitter ? glitter.hyper + "," + glitter.support : ""}`;
   if (!BY_BATTLE.has(key)) {
-    const v = buffItems(a.slot === "face_top" ? a.name : "", a.slot === "ear" ? a.name : "", battle)[0].v;
     const s = Object.assign({}, a.stats);
-    delete s.cd_mult;
-    if (v) s.cd_mult = v;
+    if (battle != null) {
+      const v = buffItems(a.slot === "face_top" ? a.name : "", a.slot === "ear" ? a.name : "", battle)[0].v;
+      delete s.cd_mult;
+      if (v) s.cd_mult = v;
+    }
+    const f = glitter && e.final_by_cartridge;   // 네블론 카트리지를 넣었으면 하이퍼·서포트 개수로 최종 데미지
+    if (f) s.final = +(f.base * f.hyper[glitter.hyper] * f.support[glitter.support] - 1).toFixed(6);
     BY_BATTLE.set(key, s);
   }
   return BY_BATTLE.get(key);
@@ -236,9 +275,10 @@ export function atmaSet(gear) {
  */
 export function gearEffects(gear, atkType, avatarChoice, ignore, battle = null) {
   const acc = { visible: {}, ignored: {}, cdMults: [], finals: [], unknown: [] };
+  const cart = equipCartridges(gear.equip), b = cart.has ? cart.counts.battle : battle, glitter = cart.has ? cart.counts : null;   // 네블론이 있으면 그 카트리지로
   const items = [];
   for (const layer of ["avatar", "normal"]) for (const name of Object.values(gear[layer])) { const a = ACC_BY_NAME.get(name); if (a) items.push(a); }
-  for (const a of items) { addStats(acc, itemStats(a, battle), atkType); if (a.unknown) acc.unknown.push(a.name); }
+  for (const a of items) { addStats(acc, itemStats(a, b, glitter), atkType); if (a.unknown) acc.unknown.push(a.name); }
   const w = WAVATAR_BY_NAME.get(gear.wavatar); if (w) addStats(acc, w.stats, atkType);
   const o = OUTFIT_BY_NAME.get(gear.outfit); if (o) addStats(acc, o.stats, atkType);
   for (const [piece, set] of Object.entries(gear.armor)) {
@@ -246,7 +286,7 @@ export function gearEffects(gear, atkType, avatarChoice, ignore, battle = null) 
     else if (set) acc.unknown.push(`${set} (레어 아바타)`);
   }
   if (gear.spirit != null && SPIRIT_FX[gear.spirit]) addStats(acc, SPIRIT_FX[gear.spirit], atkType);
-  addEquip(acc, gear.equip, atkType);
+  addEquip(acc, gear.equip, atkType, cart);
 
   // 세트 효과. 무악 세트는 AVATAR_SET_LIMIT 개까지만
   const all = setStages(countSets(gear), ignore);
@@ -399,7 +439,7 @@ export function gearScorer(ctx, beforeGear, { ignoreSets = null } = {}) {
     .concat(ctx.slotStone ? [ctx.slotStone] : []).filter(p => Object.keys(p.stats).every(s => has(win, s)));
   // 네블론 소켓에 끼울(뺄) 마법석은 방어구마다 한 번만 고른다: 지금 스탯창에 방어구 변화만 반영한 상태에서
   // (악세 조합마다 다시 고르면 자동 찾기가 몇 배 느려진다)
-  const equipOnly = eq => { const a = { visible: {}, cdMults: [], finals: [], ignored: {} }; addEquip(a, eq, atkType); return a; };
+  const equipOnly = eq => { const a = { visible: {}, cdMults: [], finals: [], ignored: {}, unknown: [] }; addEquip(a, eq, atkType); return a; };
   const slotMemo = new Map(), beforeEquip = equipOnly(beforeGear.equip);
   const slotPlan = (g, dn) => {
     const key = JSON.stringify(g && g.equip || null);

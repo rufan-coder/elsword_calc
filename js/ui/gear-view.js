@@ -4,9 +4,9 @@
 import { $, esc, signed, trimPct } from "./dom.js";
 import { ACC_SLOTS, ACCESSORIES, NEW_ACCESSORIES, ARMOR_AVATARS, WEAPON_AVATARS, OUTFITS, WEAPONS, ATMA, AVATAR_SET_LIMIT } from "../data/accessories.js";
 import { ICONS } from "../data/icons.js";
-import { compareGear, emptyGear, STAT_NAMES, IGNORED, EQUIP_PARTS } from "../calc/gear.js";
-import { ARMOR_TYPES, ARMOR_SETS, ARMOR_REROLL } from "../data/equipment.js";
-import { optimizeGear, townsToTry, sortByTown, OVER_PENALTY } from "../calc/gear-optimize.js";
+import { compareGear, emptyGear, STAT_NAMES, IGNORED, EQUIP_PARTS, equipCartridges } from "../calc/gear.js";
+import { ARMOR_TYPES, ARMOR_SETS, ARMOR_REROLL, CARTRIDGES } from "../data/equipment.js";
+import { optimizeGear, townsToTry, sortByTown, lockFrom, OVER_PENALTY } from "../calc/gear-optimize.js";
 import { TOWN_BUFFS, BUFF_ITEMS, MAX_ENHANCE } from "../data/buffs.js";
 import { capOver, CAP_NOTES } from "../calc/caps.js";
 import { SWAP_STONES } from "../data/stones.js";
@@ -34,7 +34,7 @@ const lockKey = (group, slot) => group === "weapon" ? null : group === "town" ||
  */
 const DEFAULT_LOCKS = ["element", "normal.weapon", "normal.support", "normal.face_top", "normal.face_mid", "normal.face_low", "normal.top", "normal.arm", "normal.ear", "normal.neck", "normal.ring", "normal.ring2"];
 const LOCK_VERSION = 2;   // 기본 고정이 바뀌면 올린다 (저장된 일반 악세 고정을 한 번 기본값으로 맞춘다)
-const LOCK_TITLE = "자동 찾기에서 지금 것을 그대로 둬요";
+const LOCK_TITLE = "자동 찾기에서 바꾸지 않아요 (바꿔 보기에 고른 것, 그대로면 지금 것)";   // title 속성에 들어가니 따옴표는 쓰지 않는다
 const lockCell = (key, name) => `<td class="lock">${key ? `<input type="checkbox" id="gear-lock-${key}" data-lock="${key}" aria-label="${esc(name)} 고정" title="${LOCK_TITLE}">` : ""}</td>`;
 const ARMOR_PIECES = ["hair", "top", "bottom", "gloves", "shoes"];
 const ATMA_GRADED = ATMA.pieces.filter(s => s !== "top");   // 만다라는 등급이 이름에 들어 있다
@@ -91,6 +91,16 @@ const REROLL_SHORT = {
   "강렬한 스킬 데미지": "강렬스뎀", "초월한 스킬 데미지": "초스뎀", "모든 스킬 데미지": "모스뎀", "크리티컬": "크리", "극대화": "극대",
 };
 const REROLL_CHOICES = Object.keys(ARMOR_REROLL).filter(n => ARMOR_REROLL[n].stat).map(n => [n, REROLL_SHORT[n] || n]);
+// 네블론 카트리지 (부위마다 1개, 레벨 1~6). 화면에는 짧은 이름 (효과)로 보여 준다. 하이퍼는 [ ] 안 이름만
+const CART_EFFECT = {
+  "하이퍼 카트리지 [오버플로우]": "최종뎀", "하이퍼 카트리지 [엑셀레이션]": "쿨감", "하이퍼 카트리지 [뮤테이션]": "초적응·양극화↓",
+  "서포트 카트리지 Type - 1": "공용 물마공", "서포트 카트리지 Type - 2": "공용 모스뎀",   // 서포트1·2는 서포터 전용 (안내 문구에 적음)
+  "배틀 카트리지 Type - 1": "추피", "배틀 카트리지 Type - 2": "모스뎀", "배틀 카트리지 Type - 3": "강렬·초월", "배틀 카트리지 Type - 4": "크뎀", "배틀 카트리지 Type - 5": "보뎀",
+  "클래식 카트리지 Type - 1": "양극화", "클래식 카트리지 Type - 2": "쿨감",
+};
+const cartLabel = n => `${n.replace(/^하이퍼 카트리지 \[(.+)\]$/, "$1").replace(/ 카트리지 Type - /, "")} (${CART_EFFECT[n]})`;
+// 고를 수 있는 것: 효과를 아는 것만. 딜러에게 의미 없는 서플라이·앰플리파이어·택티컬·서포트3·클래식3~5는 뺀다
+const CART_CHOICES = Object.keys(CARTRIDGES).filter(n => CART_EFFECT[n]).map(n => [n, cartLabel(n)]), CART_LV_MAX = "6";
 const stepText = v => +(v * 100).toFixed(3) + "%";
 
 function equipTable() {
@@ -103,18 +113,21 @@ function equipTable() {
   const steps = Array.from({ length: +STEP_MAX }, (_, i) => [String(i + 1), `${i + 1}단계`]);
   const opts = (side, p) => `<div class="eq-opts" id="gear-${side}-eq-${p}-opts">` + OPT_LINES.map(i => `<div class="pick eq">` +
     `<select id="gear-${side}-eq-${p}-o${i}" aria-label="${side === "now" ? "지금" : "바꿔 볼"} ${PART_NAMES[p]} 옵션 변환 ${i}줄">${options(REROLL_CHOICES, side === "now" ? [["", "없음·그 밖"]] : [[SAME, "그대로"], ["", "없음·그 밖"]])}</select>` +
-    `<select class="n" id="gear-${side}-eq-${p}-s${i}" aria-label="${PART_NAMES[p]} 옵션 변환 ${i}줄 수치">${options(steps, [])}</select></div>`).join("") + `</div>`;
+    `<select class="n" id="gear-${side}-eq-${p}-s${i}" aria-label="${PART_NAMES[p]} 옵션 변환 ${i}줄 수치">${options(steps, [])}</select></div>`).join("") +
+    `<div class="pick eq"><select id="gear-${side}-eq-${p}-cart" aria-label="${side === "now" ? "지금" : "바꿔 볼"} ${PART_NAMES[p]} 카트리지">${options(CART_CHOICES, side === "now" ? [["", "카트리지 없음"]] : [[SAME, "그대로"], ["", "카트리지 없음"]])}</select>` +
+    `<select class="n lv" id="gear-${side}-eq-${p}-clv" aria-label="${PART_NAMES[p]} 카트리지 레벨">${options(Array.from({ length: +CART_LV_MAX }, (_, i) => [String(i + 1), `Lv${i + 1}`]), [])}</select></div>` + `</div>`;
   let html = `<div class="sub">방어구</div><div class="tbl-wrap"><table class="gear eq"><thead><tr><th>부위</th><th>지금</th><th>바꿔 보기</th><th class="lock"></th></tr></thead><tbody>`;
   for (const p of EQUIP_PARTS) {
     html += `<tr><td class="lbl">${PART_NAMES[p]}</td><td>${part("now", p)}</td><td class="next">${part("next", p)}</td><td class="lock"></td></tr>`;
-    html += `<tr class="eq-opt" id="gear-eq-${p}-optrow" hidden><td class="lbl" title="${PART_NAMES[p]} 옵션 변환">옵변</td><td>${opts("now", p)}</td><td class="next">${opts("next", p)}</td><td class="lock"></td></tr>`;
+    html += `<tr class="eq-opt" id="gear-eq-${p}-optrow" hidden><td class="lbl" title="${PART_NAMES[p]} 옵션 변환·카트리지">옵변<br>카트리지</td><td>${opts("now", p)}</td><td class="next">${opts("next", p)}</td><td class="lock"></td></tr>`;
   }
   html += `<tr><td class="lbl">4세트</td>` +
     `<td><div class="pick"><select id="gear-now-eq-set" aria-label="지금 방어구 세트">${options(sets, [["", "입력 안 함"]])}</select></div></td>` +
     `<td class="next"><div class="pick"><select id="gear-next-eq-set" aria-label="바꿔 볼 방어구 세트">${options(sets, [[SAME, "그대로"]])}</select></div></td><td class="lock"></td></tr>`;
   html += `</tbody></table></div>` +
     `<p class="hint">엑사 = 엑사스케일, 테네 = 테네브로스. 지금 낀 방어구의 종류·강화·재련과 세트를 넣고, 바꿔 볼 쪽을 고르면 그 차이를 계산해요. "지금" 종류를 넣은 부위만 계산해요. 세트 효과는 네 부위가 모두 그 세트를 쓸 수 있는 방어구일 때만 켜져요.</p>` +
-    `<p class="hint">네블론을 고르면 그 부위의 옵션 변환 3줄을 넣는 칸이 생겨요. 수치는 합연으로 더하고, "강화당" 옵션은 그 부위 강화 수치를 곱해요. DPS에 안 들어가는 옵션은 "없음·그 밖"으로 두세요.</p>` +
+    `<p class="hint">네블론을 고르면 그 부위의 옵션 변환 3줄과 카트리지를 넣는 칸이 생겨요. 옵션 변환 수치는 합연으로 더하고, "강화당" 옵션은 그 부위 강화 수치를 곱해요. DPS에 안 들어가는 옵션은 "없음·그 밖"으로 두세요.</p>` +
+    `<p class="hint">카트리지는 같은 종류면 가장 높은 레벨 하나만 세요. 스탯창에 보이는 효과(배틀·클래식·뮤테이션)와 오버플로우 최종 데미지를 넣고, 서포트1·2는 서포터만 효과가 있어서 효과는 빼고 글리터의 훈장 개수에만 넣어요. 네블론이 있는 쪽은 글리터의 훈장도 그 카트리지로 계산해요 (곱연 크뎀은 배틀·클래식 개수, 최종 데미지는 하이퍼·서포트 개수).</p>` +
     `<p class="hint">네블론은 부위마다 소켓이 1칸 더 있어요. 네블론 부위 수가 바뀌면 늘어난 칸에 크리 6%·극대 6%·"소켓 교체 기준" 마법석 중 DPS가 가장 높은 것을 끼워서 계산해요 (줄면 손해가 가장 적은 것을 빼요).</p>` +
     `<p class="hint">하의·신발 강화는 버프 세팅의 하의·신발 강화 수치와 같은 칸이에요 (한쪽을 바꾸면 다른 쪽도 바뀌어요). 고정 공격력·카트리지는 계산하지 않아요. 자동 찾기는 방어구를 바꾸지 않고, "바꿔 보기"의 방어구를 낀 채로 악세를 찾아요.</p>`;
   return html;
@@ -127,6 +140,13 @@ function rerollLine(side, p, i) {
   return o && ARMOR_REROLL[o] ? { name: o, step: +eqSel(side, `${p}-s${i}`).value } : null;
 }
 
+/** 카트리지: { name, lv } 또는 null. "바꿔 보기"의 그대로는 지금 카트리지 (지금이 네블론이 아니면 없음) */
+function cartLine(side, p) {
+  const c = eqSel(side, `${p}-cart`).value;
+  if (side === "next" && c === SAME) return eqSel("now", `${p}-type`).value === NEBULON ? cartLine("now", p) : null;
+  return c && CARTRIDGES[c] ? { name: c, lv: +eqSel(side, `${p}-clv`).value } : null;
+}
+
 /** 방어구: "지금" 종류를 넣은 부위만. 아무것도 안 넣었으면 null */
 function readEquip(side) {
   const v = key => { const x = eqSel(side, key).value; return side === "next" && x === SAME ? eqSel("now", key).value : x; };
@@ -134,7 +154,7 @@ function readEquip(side) {
   for (const p of EQUIP_PARTS) {
     const type = eqSel("now", `${p}-type`).value ? v(`${p}-type`) : "";
     eq[p] = type ? { type, enh: +v(`${p}-enh`), ref: +v(`${p}-ref`) } : null;
-    if (type === NEBULON) eq[p].opts = OPT_LINES.map(i => rerollLine(side, p, i)).filter(Boolean);
+    if (type === NEBULON) { eq[p].opts = OPT_LINES.map(i => rerollLine(side, p, i)).filter(Boolean); eq[p].cart = cartLine(side, p); }
   }
   return EQUIP_PARTS.some(p => eq[p]) || eq.set ? eq : null;
 }
@@ -149,6 +169,8 @@ function syncEquip() {
     $(`gear-next-eq-${p}-opts`).hidden = nextType !== NEBULON;
     // "바꿔 보기"의 그대로: 지금이 네블론이 아니면 옮겨 올 줄이 없어서 "골라 주세요" (계산은 없음)
     for (const i of OPT_LINES) eqSel("next", `${p}-o${i}`).options[0].textContent = nowType === NEBULON ? "그대로" : "골라 주세요";
+    eqSel("next", `${p}-cart`).options[0].textContent = nowType === NEBULON ? "그대로" : "골라 주세요";
+    for (const side of ["now", "next"]) { const c = eqSel(side, `${p}-cart`).value; eqSel(side, `${p}-clv`).hidden = !(c && c !== SAME); }
     for (const side of ["now", "next"]) for (const i of OPT_LINES) {
       const o = eqSel(side, `${p}-o${i}`).value, s = eqSel(side, `${p}-s${i}`), def = o !== SAME && ARMOR_REROLL[o];
       s.hidden = !def;
@@ -196,7 +218,10 @@ function buildTables() {
   $("gear-tables").innerHTML = html;
   for (const p of EQUIP_PARTS) {
     eqSel("now", `${p}-enh`).value = EQ_DEFAULT.enh; eqSel("now", `${p}-ref`).value = EQ_DEFAULT.ref;
-    for (const side of ["now", "next"]) for (const i of OPT_LINES) eqSel(side, `${p}-s${i}`).value = STEP_MAX;
+    for (const side of ["now", "next"]) {
+      for (const i of OPT_LINES) eqSel(side, `${p}-s${i}`).value = STEP_MAX;
+      eqSel(side, `${p}-clv`).value = CART_LV_MAX;
+    }
   }
 }
 
@@ -418,6 +443,9 @@ export function renderGear({ win, job, resist, setup, town }) {
   if (Math.abs((r.after.fixedAtk || 0) - (r.before.fixedAtk || 0)) > 1e-9) notes.push(`방어구 재련 고정 공격력 ${(r.before.fixedAtk || 0).toLocaleString("ko-KR")} → ${(r.after.fixedAtk || 0).toLocaleString("ko-KR")}은 계산에 넣지 않았어요.`);
   const eqMissing = EQUIP_PARTS.filter(p => !eqSel("now", `${p}-type`).value && ![SAME, ""].includes(eqSel("next", `${p}-type`).value)).map(p => PART_NAMES[p]);
   if (eqMissing.length) notes.push(`방어구 ${eqMissing.join("·")}는 "지금" 종류를 넣지 않아서 계산에서 빠졌어요.`);
+  const nowCart = equipCartridges(readGear("now").equip);
+  if (nowCart.has && setup.glitter_battle != null && nowCart.counts.battle !== setup.glitter_battle && [readGear("now"), readGear("next")].some(g => g.normal.ear === "글리터의 훈장"))
+    notes.push(`"지금" 네블론 카트리지의 배틀·클래식 개수(${nowCart.counts.battle}개)가 버프 세팅(${setup.glitter_battle}개)과 달라요. 악세 세팅은 카트리지 기준으로 계산했어요. 스펙 계산의 실전 크뎀에도 맞추려면 버프 세팅의 카트리지 개수를 바꿔 주세요.`);
   const nextTown = readGear("next").town;
   if (nextTown) notes.push(`마을 버프를 "${nextTown}"(으)로 바꿔서 계산했어요. 그 버프를 쓰기로 했다면 스펙 계산의 마을 버프도 바꿔 주세요 (그래야 다음에 비교할 때 "지금"이 맞아요).`);
   if (notes.length) html += `<ul class="notes">${notes.map(n => `<li>${esc(n)}</li>`).join("")}</ul>`;
@@ -630,15 +658,17 @@ export function initGear(onChange) {
     st.hidden = false;
     if (!lastCtx || !hasWindow(lastCtx.win)) { st.textContent = "먼저 스펙 계산에 스탯창 값을 넣어 주세요. 그 값으로 DPS를 계산해서 찾아요."; return; }
     btn.disabled = true;
-    const ctx = lastCtx, now = readGear("now"), locked = readLocks(), target = cdrTarget(ctx.win);
-    const towns = townsToTry(ctx, locked), results = [];
+    const ctx = lastCtx, now = readGear("now"), next = readGear("next"), locked = readLocks(), target = cdrTarget(ctx.win);
+    const start = lockFrom(now, next, locked);   // 고정한 칸은 "바꿔 보기"에 고른 것 (그대로면 지금 것)
+    const lockChanged = JSON.stringify(start) !== JSON.stringify(lockFrom(now, now, locked));
+    const towns = townsToTry(ctx, locked, start), results = [];
     const t = performance.now();
     try {
       // 마을 버프마다 나눠 돌리고, 사이사이 화면에 진행 상황을 그린다
       for (let i = 0; i < towns.length; i++) {
         st.textContent = towns.length > 1 ? `찾는 중이에요… (마을 버프 ${i + 1}/${towns.length}: ${towns[i] || ctx.town})` : "찾는 중이에요…";
         await new Promise(r => setTimeout(r, 30));
-        const r = optimizeGear(ctx, now, { locked, cdrTarget: target, towns: [towns[i]], equip: readGear("next").equip });   // 방어구는 바꿔 보기 것으로
+        const r = optimizeGear(ctx, now, { locked, cdrTarget: target, towns: [towns[i]], equip: next.equip, start });   // 방어구는 바꿔 보기 것으로
         results.push(r.byTown[0]);
         results[results.length - 1].plans = r.plans;
       }
@@ -652,9 +682,11 @@ export function initGear(onChange) {
       // 점수 = DPS 변화 - 상한 초과 몫. 지금 세팅의 점수보다 높으면 바꾼 것이다 (DPS를 조금 손해 보고 초과를 줄인 경우도 있다)
       const better = best.score > -OVER_PENALTY * best.overNow + 1e-9;
       const overText = Math.abs(best.over - best.overNow) > 5e-5 ? ` 상한 초과 합 ${trimPct(best.overNow)}p → ${trimPct(best.over)}p.` : "";
-      const eqChanged = JSON.stringify(best.gear.equip) !== JSON.stringify(now.equip);   // 방어구를 바꿔 봤으면 그 방어구 기준의 답 (지금보다 낮을 수도 있다)
-      const head = eqChanged
-        ? `"바꿔 보기"의 방어구를 낀 채로 가장 좋은 악세 조합을 채웠어요${towns.length > 1 ? ` (마을 버프: ${best.town})` : ""}. 지금보다 DPS ${signed(best.gain)}.${overText} 세트 조합 ${plans.toLocaleString("ko-KR")}가지를 따져 봤어요 (${sec}초).`
+      // 방어구나 고정 칸을 "바꿔 보기"에서 바꿨으면 그 기준의 답 (지금보다 낮을 수도 있다)
+      const eqChanged = JSON.stringify(best.gear.equip) !== JSON.stringify(now.equip);
+      const kept = [lockChanged ? "고정 칸" : "", eqChanged ? "방어구" : ""].filter(Boolean).join("과 ");
+      const head = kept
+        ? `"바꿔 보기"의 ${kept}${eqChanged ? "를" : "을"} 그대로 두고 가장 좋은 조합을 채웠어요${towns.length > 1 ? ` (마을 버프: ${best.town})` : ""}. 지금보다 DPS ${signed(best.gain)}.${overText} 세트 조합 ${plans.toLocaleString("ko-KR")}가지를 따져 봤어요 (${sec}초).`
         : better
         ? `가장 좋은 조합을 "바꿔 보기"에 채웠어요${towns.length > 1 ? ` (마을 버프: ${best.town})` : ""}. 지금보다 DPS ${signed(best.gain)}${best.gain < -1e-9 ? " (상한 초과를 줄이느라 조금 낮아졌어요)" : ""}.${overText} 세트 조합 ${plans.toLocaleString("ko-KR")}가지를 따져 봤어요 (${sec}초).`
         : "지금 세팅이 이미 가장 좋아요.";
@@ -685,7 +717,7 @@ export function initGear(onChange) {
     saveGear(); onChange();
   });
   $("gear-clear").addEventListener("click", () => {
-    for (const e of allSelects()) if (e.id.startsWith("gear-now-") && !/-eq-.+-(enh|ref|s\d)$/.test(e.id)) { e.value = e.id.includes("-grade-") ? "유니크" : e.id.endsWith("-element") ? "유수" : e.id.endsWith("-weapon") ? DEFAULT_WEAPON : ""; e.classList.remove("filled", "check"); }
+    for (const e of allSelects()) if (e.id.startsWith("gear-now-") && !/-eq-.+-(enh|ref|s\d|clv)$/.test(e.id)) { e.value = e.id.includes("-grade-") ? "유니크" : e.id.endsWith("-element") ? "유수" : e.id.endsWith("-weapon") ? DEFAULT_WEAPON : ""; e.classList.remove("filled", "check"); }
     nowAvatarSets = null; lastShot = {};
     saveGear(); onChange();
   });
