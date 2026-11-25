@@ -10,7 +10,8 @@
 //     avatarSets: [세트 이름...] | null   무악 세트를 4개 이상 맞췄을 때 켜 둔 세트 (null 이면 자동)
 //     town:    마을 버프 이름 | null      바꿔 볼 마을 버프 (null 이면 스펙 계산에서 고른 버프 그대로)
 //     spirit:  0~2 | null                 아티팩트 정령석 중 양극화로 고른 개수 (나머지는 물마). null 이면 입력 안 함
-//     equip:   { top, bottom, gloves, shoes, set } | null   방어구. 부위마다 { type: "네블론", enh: 강화, ref: 재련 } 또는 null,
+//     equip:   { top, bottom, gloves, shoes, set } | null   방어구. 부위마다 { type: "네블론", enh: 강화, ref: 재련, opts } 또는 null,
+//              opts: 네블론 옵션 변환 [{ name: ARMOR_REROLL 이름, step: 1~10 }, ...] (네블론만, 3줄까지)
 //              set: 4세트 이름 (js/data/equipment.js 의 ARMOR_SETS). 지금 방어구를 넣은 부위만 계산한다
 //   }
 //
@@ -21,6 +22,9 @@
 //   글리터의 훈장의 곱연 크뎀은 버프 세팅의 배틀·클래식 카트리지 개수(setup.glitter_battle)를 따른다.
 //   방어구의 하의·신발 강화(크리·극대 곱연산)는 버프 세팅의 하의·신발 강화 수치를 바뀐 강화 차이만큼 옮겨서 센다.
 //   방어구 고정 공격력(재련)은 다른 고정 공격력처럼 계산하지 않는다.
+//   네블론 방어구는 부위마다 소켓이 1칸 더 있다. 네블론 부위 수가 바뀌면 늘어난 칸에 크리 6%·극대 6%·ctx.slotStone 중
+//   DPS가 가장 높은 것을 끼운다 (줄면 빼서 손해가 가장 적은 것을 뺀다). 고르는 기준은 지금 스탯창에 방어구 변화만 반영한 상태.
+//   크리·극대 소켓 기준을 꺼도 센다.
 
 import { ACCESSORIES, NEW_ACCESSORIES, ARMOR_AVATARS, WEAPON_AVATARS, OUTFITS, WEAPONS, SETS, ATMA, AVATAR_SET_LIMIT, SPIRIT_STONES } from "../data/accessories.js";
 import { critFromStat, statFromCrit, maxiFromStat, statFromMaxi } from "./diminish.js";
@@ -28,7 +32,7 @@ import { resolve, dpsIndex, has } from "./stats.js";
 import { setupWithTown, buffItems } from "./buffs.js";
 import { BUFF_ITEMS } from "../data/buffs.js";
 import { CRIT_MAXI_PER_SLOT } from "../data/stones.js";
-import { ARMOR_TYPES, ARMOR_PART_ENHANCE, ARMOR_SETS } from "../data/equipment.js";
+import { ARMOR_TYPES, ARMOR_PART_ENHANCE, ARMOR_SETS, ARMOR_REROLL } from "../data/equipment.js";
 
 const ACC_BY_NAME = new Map([...ACCESSORIES, ...NEW_ACCESSORIES].map(a => [a.name, a]));
 const WAVATAR_BY_NAME = new Map(WEAPON_AVATARS.map(w => [w.name, w]));
@@ -84,7 +88,13 @@ function addEquip(acc, equip, atkType) {
     addStats(acc, equipStats(enh), atkType);
     addStats(acc, equipStats(ref), atkType);
     acc.fixedAtk += ref.fixed_atk || 0;
-    if (t.nebulon) acc.nebulon++;
+    if (t.nebulon) {
+      acc.nebulon++;
+      for (const o of e.opts || []) {   // 옵션 변환 (합연). "강화 1당" 옵션은 그 부위 강화 수치를 곱한다
+        const def = ARMOR_REROLL[o.name], v = def && def.steps[o.step - 1];
+        if (def && def.stat && v) addStats(acc, partStat(def.stat, +(v * (def.perEnhance ? e.enh : 1)).toFixed(6)), atkType);
+      }
+    }
     if (part === "top") acc.finals.push(P.top.final.base + P.top.final.per * e.enh);
     if (part === "gloves") addStats(acc, partStat("all_skill", P.gloves.all_skill.base + P.gloves.all_skill.per * e.enh), atkType);
     if (part === "bottom") acc.partMult.crit = P.bottom.crit_mult.base + P.bottom.crit_mult.per * e.enh;
@@ -293,43 +303,52 @@ function dps(win, job, resist, setup, fx) {
 }
 
 /**
- * 크리·극대 소켓 기준 (ctx.sockets): 장비로 크리·극대가 바뀌면, 그 스탯의 마법석(6%)을 다른 마법석과 한 칸씩 바꿔 보고
- *   - DPS가 오르면: 바뀐 크리·극대와 그 소켓 교체까지 반영한 값으로 센다
- *   - 안 오르면: 그 크리·극대 변화는 없는 것으로 센다 (소켓이 6% 단위라 작은 변화는 실제로 다른 스탯으로 바꿀 수 없다고 본다)
- * 크리·극대가 늘었으면 그 마법석을 빼 보고, 줄었으면 더 끼워 본다. 좋아지는 동안 세 칸까지.
- * 지금 소켓은 크극 최적화로 맞춰 둔 상태(바꿔도 이득이 없는 상태)라고 가정한다.
+ * 크리·극대 소켓 기준 (ctx.sockets): 장비로 크리·극대가 바뀌면, 바뀐 만큼 그 스탯의 마법석(6%)을 다른 마법석과 바꿔서 센다.
+ *   바꾸는 칸 수 = 바뀐 양 / 6% 를 반올림 (크리 +10% -> 2칸: 크리 −12%, 사냥석이면 보뎀 +5%). 최적 크극보다 조금 낮아도 그대로 센다.
+ *   늘었으면 그 마법석을 빼고, 줄었으면 더 끼운다. 반올림해서 0칸(3% 미만)이면 소켓은 그대로 두고 바뀐 크리·극대를 그대로 센다.
+ * 지금 소켓은 크극 최적화로 맞춰 둔 상태라고 가정한다.
  * sockets.partners: 크리·극대 대신 끼우는 마법석 [{ name, stats: { boss: 0.025 } }, ...]
- * 반환: { real: 소켓 교체까지 한 스탯창, value: 계산에 쓰는 DPS 지수, swaps: [{ k, dir, name }], dropped: [없는 것으로 센 스탯] }
+ * 반환: { real: 소켓 교체까지 한 스탯창, swaps: [{ k, dir, name }] }
  */
-function settleSockets(win, exactWin, delta, dpsOf, sockets) {
-  if (!(Math.abs(delta.crit || 0) >= 1e-9 && has(win, "crit")) && !(Math.abs(delta.maxi || 0) >= 1e-9 && has(win, "maxi")))
-    return { real: exactWin, value: dpsOf(exactWin), swaps: [], dropped: [] };
-  let cur = exactWin, v = dpsOf(cur);
-  const swaps = [], dropped = [];
+function settleSockets(exactWin, delta, sockets) {
+  let cur = exactWin;
+  const swaps = [];
   for (const k of ["crit", "maxi"]) {
     const dk = delta[k] || 0;
     if (Math.abs(dk) < 1e-9 || !has(cur, k)) continue;
-    const dir = dk > 0 ? -1 : 1;
-    let n = 0;
-    for (let i = 0; i < 3; i++) {
-      let best = null;
-      for (const p of dir < 0 ? sockets.add : sockets.remove) {
-        if (!Object.keys(p.stats).every(s => has(cur, s))) continue;
-        const d = { [k]: dir * CRIT_MAXI_PER_SLOT };
-        for (const [s, x] of Object.entries(p.stats)) d[s] = (d[s] || 0) - dir * x;
-        const w = shiftWindow(cur, d).win, x = dpsOf(w);
-        if (x > v * (1 + 1e-12) && (!best || x > best.v)) best = { w, v: x, p };
-      }
-      if (!best) break;
-      cur = best.w; v = best.v; n++; swaps.push({ k, dir, name: best.p.name });
-    }
-    if (!n) dropped.push(k);
+    const dir = dk > 0 ? -1 : 1, p = (dir < 0 ? sockets.add : sockets.remove)[0];
+    if (!p || !Object.keys(p.stats).every(s => has(cur, s))) continue;
+    const n = Math.round(Math.abs(dk) / CRIT_MAXI_PER_SLOT + 1e-9);   // 0.5 칸은 올린다
+    if (!n) continue;
+    const d = { [k]: dir * CRIT_MAXI_PER_SLOT * n };
+    for (const [s, x] of Object.entries(p.stats)) d[s] = (d[s] || 0) - dir * x * n;
+    cur = shiftWindow(cur, d).win;
+    for (let i = 0; i < n; i++) swaps.push({ k, dir, name: p.name });
   }
-  if (!dropped.length) return { real: cur, value: v, swaps, dropped };
-  const calc = Object.assign({}, cur);
-  for (const k of dropped) calc[k] = win[k];   // 쓰지 못한 크리·극대 변화는 지금 값으로 되돌려 계산
-  return { real: cur, value: dpsOf(calc), swaps, dropped };
+  return { real: cur, swaps };
 }
+
+/**
+ * 네블론 소켓: 네블론 부위 수가 dn 만큼 바뀌면 그만큼 소켓 칸을 끼우거나(dn > 0) 뺀다(dn < 0).
+ * 한 칸씩, 끼울 때는 DPS가 가장 높아지는 마법석, 뺄 때는 빼도 DPS가 가장 높게 남는 마법석을 고른다. 반환: 고른 마법석 목록
+ */
+function pickSlots(cur, dn, dpsOf, stones) {
+  const dir = dn > 0 ? 1 : -1, picked = [];
+  for (let i = 0; i < Math.abs(dn); i++) {
+    let best = null;
+    for (const p of stones) {
+      const w = shiftWindow(cur, slotDelta([p], dir)).win, v = dpsOf(w);
+      if (!best || v > best.v) best = { w, v, p };
+    }
+    cur = best.w; picked.push(best.p);
+  }
+  return picked;
+}
+const slotDelta = (stones, dir) => {
+  const d = {};
+  for (const p of stones) for (const [s, x] of Object.entries(p.stats)) d[s] = (d[s] || 0) + dir * x;
+  return d;
+};
 
 /** 무악 세트가 4개 이상이면, 켤 수 있는 조합 중 score(세트 이름 목록)가 가장 높은 것. 3개 이하면 null */
 function bestAvatarChoice(gear, score, ignore) {
@@ -375,23 +394,45 @@ export function gearScorer(ctx, beforeGear, { ignoreSets = null } = {}) {
       remove: [ok.reduce((a, p) => at(p, -1) > at(a, -1) ? p : a)],
     };
   }
-  /** 효과 묶음 -> 바뀐 스탯창(shifted: 장비만, real: 소켓 교체까지)과 DPS 지수. exact 면 소켓 기준을 쓰지 않는다 */
-  const settle = (fx, st0, exact) => {
+  // 네블론 소켓에 끼울 후보: 크리 6%, 극대 6%, 소켓 교체 기준 마법석 (스탯창에 그 칸이 있는 것만)
+  const slotStones = [{ name: `크리 ${CRIT_MAXI_PER_SLOT * 100}%`, stats: { crit: CRIT_MAXI_PER_SLOT } }, { name: `극대 ${CRIT_MAXI_PER_SLOT * 100}%`, stats: { maxi: CRIT_MAXI_PER_SLOT } }]
+    .concat(ctx.slotStone ? [ctx.slotStone] : []).filter(p => Object.keys(p.stats).every(s => has(win, s)));
+  // 네블론 소켓에 끼울(뺄) 마법석은 방어구마다 한 번만 고른다: 지금 스탯창에 방어구 변화만 반영한 상태에서
+  // (악세 조합마다 다시 고르면 자동 찾기가 몇 배 느려진다)
+  const equipOnly = eq => { const a = { visible: {}, cdMults: [], finals: [], ignored: {} }; addEquip(a, eq, atkType); return a; };
+  const slotMemo = new Map(), beforeEquip = equipOnly(beforeGear.equip);
+  const slotPlan = (g, dn) => {
+    const key = JSON.stringify(g && g.equip || null);
+    if (!slotMemo.has(key)) {
+      const w0 = shiftWindow(win, minus(equipOnly(g && g.equip).visible, beforeEquip.visible)).win;
+      slotMemo.set(key, pickSlots(w0, dn, w => dps(w, job, resist, setup, before), slotStones));
+    }
+    return slotMemo.get(key);
+  };
+  /** 효과 묶음 -> 바뀐 스탯창(shifted: 장비만, real: 소켓 교체까지)과 DPS 지수. exact 면 크리·극대 소켓 기준을 쓰지 않는다 */
+  const settle = (fx, st0, g, exact) => {
     const st = withPartEnhance(st0, fx, before);   // 방어구 하의·신발 강화가 바뀌었으면 크리·극대 곱연산도
     const delta = minus(fx.visible, before.visible), shifted = shiftWindow(win, delta);
     const dpsOf = w => dps(w, job, resist, st, fx);
-    if (!sockets || exact) return { shifted, real: shifted.win, value: dpsOf(shifted.win), swaps: [], dropped: [], setup: st };
-    return Object.assign({ shifted, setup: st }, settleSockets(win, shifted.win, delta, dpsOf, sockets));
+    let real = shifted.win, swaps = [];
+    if (sockets && !exact) ({ real, swaps } = settleSockets(real, delta, sockets));
+    const dn = (fx.nebulon || 0) - (before.nebulon || 0);
+    if (dn && slotStones.length) {
+      const plan = slotPlan(g, dn), dir = dn > 0 ? 1 : -1;
+      real = shiftWindow(real, slotDelta(plan, dir)).win;
+      swaps = swaps.concat(plan.map(p => ({ k: "slot", dir, name: p.name })));
+    }
+    return { shifted, real, value: dpsOf(real), swaps, setup: st };
   };
-  const valueOf = (fx, g) => settle(fx, setupFor(g)).value / baseDps;
+  const valueOf = (fx, g) => settle(fx, setupFor(g), g).value / baseDps;
   const afterFor = (g, choice, exact) => {
-    const fx = gearEffects(g, atkType, choice, ignoreSets, battle), r = settle(fx, setupFor(g), exact);
-    return { fx, shifted: r.shifted, real: r.real, swaps: r.swaps, dropped: r.dropped, setup: r.setup, value: r.value / baseDps };
+    const fx = gearEffects(g, atkType, choice, ignoreSets, battle), r = settle(fx, setupFor(g), g, exact);
+    return { fx, shifted: r.shifted, real: r.real, swaps: r.swaps, setup: r.setup, value: r.value / baseDps };
   };
   // 바꾼 쪽은 사용자가 고르지 않았으면 가장 좋은 무악 세트 조합을 고른다 (켤 세트는 소켓 기준 없이 정확한 값으로 고른다)
   const evaluate = g => afterFor(g, g.avatarSets || bestAvatarChoice(g, names => afterFor(g, names, true).value, ignoreSets));
   /** 효과 묶음을 반영한 스탯창(소켓 교체까지)과 버프 (자동 찾기가 상한 초과를 잴 때 쓴다) */
-  const windowOf = (fx, g) => { const r = settle(fx, setupFor(g)); return { win: r.real, setup: r.setup }; };
+  const windowOf = (fx, g) => { const r = settle(fx, setupFor(g), g); return { win: r.real, setup: r.setup }; };
   return { before, evaluate, valueOf, windowOf };
 }
 
@@ -411,7 +452,7 @@ export function compareGear(ctx, beforeGear, afterGear) {
     ignored: minus(after.fx.ignored, before.ignored),
     blank: after.shifted.blank,
     win: after.shifted.win,   // 바꾼 뒤 스탯창 (장비만. 크리·극대 소켓 기준이면 swaps 의 소켓 교체는 따로)
-    swaps: after.swaps, dropped: after.dropped,
+    swaps: after.swaps,
     real: after.real,         // 소켓 교체까지 한 스탯창 (크리·극대 소켓 기준을 켰을 때)
     setup: after.setup,       // 바꾼 뒤 버프 (마을 버프를 바꿨으면 그 버프)
   };

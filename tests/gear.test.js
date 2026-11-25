@@ -89,19 +89,25 @@ test("세트: 사룡무는 공중요새의 유산 개수에 들어간다", () =>
   near(swap(null).delta.polar, -0.05, 10);
 });
 
-test("크리·극대 소켓 기준: 소켓(6%)을 바꿔 이득일 때만 크리·극대 변화를 센다", () => {
+test("크리·극대 소켓 기준: 바뀐 만큼(6% 단위 반올림) 소켓을 바꿔서 센다", () => {
   const scorer = gearScorer, compare = compareGear, empty = emptyGear;
   const exact = { win: PICARO.win, job: PICARO.job, resist: PICARO.resist, setup: PICARO.setup };
   const ctx = { ...exact, sockets: { partners: [{ name: "사냥석 보뎀 2.5%", stats: { boss: 0.025 } }] } };
   const val = (c, v) => scorer(c, empty()).valueOf({ visible: v, cdMults: [], finals: [] }, null) - 1;
   const boss = PICARO.win.boss + PICARO.setup.guild_boss + PICARO.job.boss;
   assert.ok(val(exact, { crit: 0.02 }) > 0);                       // 그대로 계산하면 크리 2%도 DPS가 오른다
-  assert.equal(val(ctx, { crit: 0.02 }), 0);                        // 크리 6% 한 칸을 사냥석으로 바꿔도 손해 -> 없는 것으로
+  assert.equal(val(ctx, { crit: 0.02 }), val(exact, { crit: 0.02 }));   // 3% 미만: 소켓은 그대로, 크리 2%를 그대로 센다
+  assert.equal(val(ctx, { crit: -0.02 }), val(exact, { crit: -0.02 }));
   assert.ok(Math.abs(val(ctx, { crit: 0.06 }) - ((1 + boss + 0.025) / (1 + boss) - 1)) < 1e-12);   // 크리 6% -> 사냥석 2.5%로 바꾼 값
-  assert.ok(val(ctx, { crit: -0.02 }) >= val(exact, { crit: -0.02 }) - 1e-12);   // 줄면 크리를 더 끼우는 쪽이 나으면 그 값
-  const r = compare(ctx, empty(), Object.assign(empty(), { avatar: { top: "비룡승운 : 호걸의 긍지" } }));
-  assert.deepEqual(r.dropped, ["crit"]); assert.deepEqual(r.swaps, []);
-  assert.ok(Math.abs(r.win.crit - compare(exact, empty(), Object.assign(empty(), { avatar: { top: "비룡승운 : 호걸의 긍지" } })).win.crit) < 1e-12);   // 스탯창에는 오른 크리 그대로
+  // 크리 +10% -> 2칸: 크리 −2%, 보뎀 +5% 와 같다 (최적이 아니어도)
+  assert.ok(Math.abs(val(ctx, { crit: 0.10 }) - val(exact, { crit: -0.02, boss: 0.05 })) < 1e-12);
+  // 크리 −10% -> 사냥석 2칸을 크리로: 크리 +2%, 보뎀 −5%
+  assert.ok(Math.abs(val(ctx, { crit: -0.10 }) - val(exact, { crit: 0.02, boss: -0.05 })) < 1e-12);
+  assert.ok(Math.abs(val(ctx, { crit: 0.03 }) - val(exact, { crit: -0.03, boss: 0.025 })) < 1e-12);   // 0.5칸은 올려서 1칸
+  const flower = Object.assign(empty(), { normal: { bottom: "글로잉 플라워" } });
+  const r = compare(ctx, empty(), flower);
+  assert.deepEqual(r.swaps.map(s => [s.k, s.dir, s.name]), [["crit", -1, "사냥석 보뎀 2.5%"], ["crit", -1, "사냥석 보뎀 2.5%"]]);
+  assert.ok(Math.abs(r.win.crit - compare(exact, empty(), flower).win.crit) < 1e-12);   // 스탯창 표(소켓 반영 전)에는 오른 크리 그대로
 });
 
 // ----- 방어구 -----
@@ -148,4 +154,34 @@ test("방어구: 하의·신발 강화가 바뀌면 버프 세팅의 하의 크�
   near(m.setup.maxi_mults[0], ctx.setup.maxi_mults[0] - 0.03, 12);
   // 지금 방어구를 안 넣은 부위는 옮기지 않는다
   near(compareGear(ctx, gear(), one("bottom", 12)).setup.crit_mults[0], ctx.setup.crit_mults[0], 12);
+});
+
+test("방어구: 네블론 옵션 변환은 합연으로 더하고, 강화당 옵션은 그 부위 강화를 곱한다", () => {
+  const opts = [{ name: "크리티컬", step: 10 }, { name: "강화 1당 물마공 (%)", step: 10 }, { name: "강인한 스킬 데미지", step: 10 }];
+  const fx = (type, o) => gearEffects(gear({ equip: { top: { type, enh: 12, ref: 0, opts: o }, set: null } }), "물리").visible;
+  const a = fx("네블론", opts), b = fx("네블론", []);
+  near(a.crit - (b.crit || 0), 0.012, 12);                 // 크리 1.2 -> +1.2%
+  near(a.atk_pct - (b.atk_pct || 0), 0.024, 12);           // 강화당 0.2% x 12강
+  assert.deepEqual(Object.keys(a).sort(), ["atk_pct", "boss", "crit", "super_adapt"]);   // 강인한 스킬 데미지는 계산 안 함
+  assert.deepEqual(fx("엑사스케일", opts), fx("엑사스케일", []));   // 옵션 변환은 네블론만
+});
+
+test("방어구: 네블론 부위가 늘면 늘어난 소켓에 가장 좋은 마법석을 끼우고, 줄면 손해가 가장 적은 것을 뺀다", () => {
+  const stone = { name: "사냥석", stats: { boss: 0.025 } };
+  const c = { ...ctx, slotStone: stone };
+  const one = type => gear({ equip: { top: { type, enh: 12, ref: 21 }, set: null } });
+  const up = compareGear(c, one("엑사스케일"), one("네블론"));
+  assert.deepEqual(up.swaps.map(x => [x.k, x.dir]), [["slot", 1]]);
+  // 소켓까지 넣은 스탯창은 장비만 바꾼 스탯창에 고른 마법석 한 칸을 더한 것
+  const add = { "사냥석": { boss: 0.025 }, "크리 6%": { crit: 0.06 }, "극대 6%": { maxi: 0.06 } }[up.swaps[0].name];
+  assert.ok(add);
+  if (add.boss) near(up.real.boss - up.win.boss, 0.025, 12);
+  // 사냥석까지 후보에 넣으면 크리·극대만 후보일 때보다 낮을 수 없다
+  const s = gearScorer(c, one("엑사스케일")), fx = s.evaluate(one("네블론")).fx;
+  const plain = gearScorer({ ...ctx }, one("엑사스케일"));   // 후보: 크리·극대만
+  assert.ok(s.evaluate(one("네블론")).value >= plain.evaluate(one("네블론")).value - 1e-12);
+  assert.equal(fx.nebulon, 1);
+  const down = compareGear(c, one("네블론"), one("엑사스케일"));
+  assert.deepEqual(down.swaps.map(x => [x.k, x.dir]), [["slot", -1]]);
+  assert.deepEqual(compareGear(c, one("네블론"), one("네블론")).swaps, []);
 });

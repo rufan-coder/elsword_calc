@@ -166,6 +166,9 @@ table.gear tr.atma td { padding-bottom: 8px; }
 .pick select[hidden] { display: none; }
 .pick.eq select { padding-left: 5px; padding-right: 2px; font-size: 12px; }
 .pick.eq select.n { flex: 0 0 68px; }
+.eq-opts { display: flex; flex-direction: column; gap: 4px; }
+.eq-opts[hidden], table.gear tr[hidden] { display: none; }
+table.gear tr.eq-opt td.lbl { color: var(--muted); font-size: 12px; }
 @media (min-width: 861px) { #page-gear .cols { grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); } }
 /* 좁은 화면: "바꿔 보기"를 "지금" 아래 줄로 내린다 */
 @media (max-width: 600px) {

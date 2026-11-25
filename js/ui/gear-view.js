@@ -5,7 +5,7 @@ import { $, esc, signed, trimPct } from "./dom.js";
 import { ACC_SLOTS, ACCESSORIES, NEW_ACCESSORIES, ARMOR_AVATARS, WEAPON_AVATARS, OUTFITS, WEAPONS, ATMA, AVATAR_SET_LIMIT } from "../data/accessories.js";
 import { ICONS } from "../data/icons.js";
 import { compareGear, emptyGear, STAT_NAMES, IGNORED, EQUIP_PARTS } from "../calc/gear.js";
-import { ARMOR_TYPES, ARMOR_SETS } from "../data/equipment.js";
+import { ARMOR_TYPES, ARMOR_SETS, ARMOR_REROLL } from "../data/equipment.js";
 import { optimizeGear, townsToTry, sortByTown, OVER_PENALTY } from "../calc/gear-optimize.js";
 import { TOWN_BUFFS, BUFF_ITEMS, MAX_ENHANCE } from "../data/buffs.js";
 import { capOver, CAP_NOTES } from "../calc/caps.js";
@@ -83,6 +83,15 @@ const eqSel = (side, key) => $(`gear-${side}-eq-${key}`);
 const setLabel = name => name.replace("-(", " (");
 const range = (n, unit) => Array.from({ length: n + 1 }, (_, i) => [String(i), i + unit]);
 const REFORGE_MAX = Math.min(...Object.values(ARMOR_TYPES).map(t => t.reforge.length)) - 1;
+// 네블론 옵션 변환 (부위마다 3줄). DPS에 들어가는 옵션만 고르고, 나머지는 "없음·그 밖"
+const NEBULON = "네블론", OPT_LINES = [1, 2, 3], STEP_MAX = "10";
+const REROLL_SHORT = {
+  "강화 1당 물마공 (%)": "강화당 물마공%", "강화 1당 크리티컬 데미지": "강화당 크뎀", "강화 1당 모든 스킬 데미지": "강화당 모스뎀",
+  "추가 지속 피해": "추피", "물마공 (%)": "물마공%", "HP 전 구간 공격뎀": "HP 전 구간 뎀", "크리티컬 데미지": "크뎀", "보스에게 주는 피해": "보뎀",
+  "강렬한 스킬 데미지": "강렬스뎀", "초월한 스킬 데미지": "초스뎀", "모든 스킬 데미지": "모스뎀", "크리티컬": "크리", "극대화": "극대",
+};
+const REROLL_CHOICES = Object.keys(ARMOR_REROLL).filter(n => ARMOR_REROLL[n].stat).map(n => [n, REROLL_SHORT[n] || n]);
+const stepText = v => +(v * 100).toFixed(3) + "%";
 
 function equipTable() {
   const types = Object.keys(ARMOR_TYPES).map(t => [t, TYPE_SHORT[t] || t]), sets = Object.keys(ARMOR_SETS).map(n => [n, setLabel(n)]);
@@ -91,15 +100,31 @@ function equipTable() {
     `<select id="gear-${side}-eq-${p}-type" aria-label="${side === "now" ? "지금" : "바꿔 볼"} ${PART_NAMES[p]} 종류">${options(types, side === "now" ? [["", "미입력"]] : first(side))}</select>` +
     `<select class="n" id="gear-${side}-eq-${p}-enh" aria-label="${PART_NAMES[p]} 강화">${options(range(MAX_ENHANCE, "강"), first(side))}</select>` +
     `<select class="n" id="gear-${side}-eq-${p}-ref" aria-label="${PART_NAMES[p]} 재련">${options(range(REFORGE_MAX, "재련"), first(side))}</select></div>`;
+  const steps = Array.from({ length: +STEP_MAX }, (_, i) => [String(i + 1), `${i + 1}단계`]);
+  const opts = (side, p) => `<div class="eq-opts" id="gear-${side}-eq-${p}-opts">` + OPT_LINES.map(i => `<div class="pick eq">` +
+    `<select id="gear-${side}-eq-${p}-o${i}" aria-label="${side === "now" ? "지금" : "바꿔 볼"} ${PART_NAMES[p]} 옵션 변환 ${i}줄">${options(REROLL_CHOICES, side === "now" ? [["", "없음·그 밖"]] : [[SAME, "그대로"], ["", "없음·그 밖"]])}</select>` +
+    `<select class="n" id="gear-${side}-eq-${p}-s${i}" aria-label="${PART_NAMES[p]} 옵션 변환 ${i}줄 수치">${options(steps, [])}</select></div>`).join("") + `</div>`;
   let html = `<div class="sub">방어구</div><div class="tbl-wrap"><table class="gear eq"><thead><tr><th>부위</th><th>지금</th><th>바꿔 보기</th><th class="lock"></th></tr></thead><tbody>`;
-  for (const p of EQUIP_PARTS) html += `<tr><td class="lbl">${PART_NAMES[p]}</td><td>${part("now", p)}</td><td class="next">${part("next", p)}</td><td class="lock"></td></tr>`;
+  for (const p of EQUIP_PARTS) {
+    html += `<tr><td class="lbl">${PART_NAMES[p]}</td><td>${part("now", p)}</td><td class="next">${part("next", p)}</td><td class="lock"></td></tr>`;
+    html += `<tr class="eq-opt" id="gear-eq-${p}-optrow" hidden><td class="lbl" title="${PART_NAMES[p]} 옵션 변환">옵변</td><td>${opts("now", p)}</td><td class="next">${opts("next", p)}</td><td class="lock"></td></tr>`;
+  }
   html += `<tr><td class="lbl">4세트</td>` +
     `<td><div class="pick"><select id="gear-now-eq-set" aria-label="지금 방어구 세트">${options(sets, [["", "입력 안 함"]])}</select></div></td>` +
     `<td class="next"><div class="pick"><select id="gear-next-eq-set" aria-label="바꿔 볼 방어구 세트">${options(sets, [[SAME, "그대로"]])}</select></div></td><td class="lock"></td></tr>`;
   html += `</tbody></table></div>` +
     `<p class="hint">엑사 = 엑사스케일, 테네 = 테네브로스. 지금 낀 방어구의 종류·강화·재련과 세트를 넣고, 바꿔 볼 쪽을 고르면 그 차이를 계산해요. "지금" 종류를 넣은 부위만 계산해요. 세트 효과는 네 부위가 모두 그 세트를 쓸 수 있는 방어구일 때만 켜져요.</p>` +
-    `<p class="hint">하의·신발 강화는 버프 세팅의 하의·신발 강화 수치와 같은 칸이에요 (한쪽을 바꾸면 다른 쪽도 바뀌어요). 고정 공격력·카트리지·소켓은 그대로라고 보고 계산하지 않아요. 자동 찾기는 방어구를 바꾸지 않고, "바꿔 보기"의 방어구를 낀 채로 악세를 찾아요.</p>`;
+    `<p class="hint">네블론을 고르면 그 부위의 옵션 변환 3줄을 넣는 칸이 생겨요. 수치는 합연으로 더하고, "강화당" 옵션은 그 부위 강화 수치를 곱해요. DPS에 안 들어가는 옵션은 "없음·그 밖"으로 두세요.</p>` +
+    `<p class="hint">네블론은 부위마다 소켓이 1칸 더 있어요. 네블론 부위 수가 바뀌면 늘어난 칸에 크리 6%·극대 6%·"소켓 교체 기준" 마법석 중 DPS가 가장 높은 것을 끼워서 계산해요 (줄면 손해가 가장 적은 것을 빼요).</p>` +
+    `<p class="hint">하의·신발 강화는 버프 세팅의 하의·신발 강화 수치와 같은 칸이에요 (한쪽을 바꾸면 다른 쪽도 바뀌어요). 고정 공격력·카트리지는 계산하지 않아요. 자동 찾기는 방어구를 바꾸지 않고, "바꿔 보기"의 방어구를 낀 채로 악세를 찾아요.</p>`;
   return html;
+}
+
+/** 옵션 변환 한 줄: { name, step } 또는 null. "바꿔 보기"의 그대로는 지금 줄 (지금이 네블론이 아니면 없음) */
+function rerollLine(side, p, i) {
+  const o = eqSel(side, `${p}-o${i}`).value;
+  if (side === "next" && o === SAME) return eqSel("now", `${p}-type`).value === NEBULON ? rerollLine("now", p, i) : null;
+  return o && ARMOR_REROLL[o] ? { name: o, step: +eqSel(side, `${p}-s${i}`).value } : null;
 }
 
 /** 방어구: "지금" 종류를 넣은 부위만. 아무것도 안 넣었으면 null */
@@ -109,8 +134,30 @@ function readEquip(side) {
   for (const p of EQUIP_PARTS) {
     const type = eqSel("now", `${p}-type`).value ? v(`${p}-type`) : "";
     eq[p] = type ? { type, enh: +v(`${p}-enh`), ref: +v(`${p}-ref`) } : null;
+    if (type === NEBULON) eq[p].opts = OPT_LINES.map(i => rerollLine(side, p, i)).filter(Boolean);
   }
   return EQUIP_PARTS.some(p => eq[p]) || eq.set ? eq : null;
+}
+
+/** 옵션 변환 칸: 네블론인 쪽만 보이고, 수치 칸은 고른 옵션의 단계 수치로 이름을 바꾼다 */
+function syncEquip() {
+  for (const p of EQUIP_PARTS) {
+    const nowType = eqSel("now", `${p}-type`).value, nx = eqSel("next", `${p}-type`).value;
+    const nextType = nowType ? (nx === SAME ? nowType : nx) : "";
+    $(`gear-eq-${p}-optrow`).hidden = nowType !== NEBULON && nextType !== NEBULON;
+    $(`gear-now-eq-${p}-opts`).hidden = nowType !== NEBULON;
+    $(`gear-next-eq-${p}-opts`).hidden = nextType !== NEBULON;
+    // "바꿔 보기"의 그대로: 지금이 네블론이 아니면 옮겨 올 줄이 없어서 "골라 주세요" (계산은 없음)
+    for (const i of OPT_LINES) eqSel("next", `${p}-o${i}`).options[0].textContent = nowType === NEBULON ? "그대로" : "골라 주세요";
+    for (const side of ["now", "next"]) for (const i of OPT_LINES) {
+      const o = eqSel(side, `${p}-o${i}`).value, s = eqSel(side, `${p}-s${i}`), def = o !== SAME && ARMOR_REROLL[o];
+      s.hidden = !def;
+      if (def && s.dataset.for !== o) {
+        [...s.options].forEach((opt, j) => { opt.textContent = stepText(def.steps[j]); });
+        s.dataset.for = o;
+      }
+    }
+  }
 }
 
 function buildTables() {
@@ -147,7 +194,10 @@ function buildTables() {
     if (first) html += equipTable();
   }
   $("gear-tables").innerHTML = html;
-  for (const p of EQUIP_PARTS) { eqSel("now", `${p}-enh`).value = EQ_DEFAULT.enh; eqSel("now", `${p}-ref`).value = EQ_DEFAULT.ref; }
+  for (const p of EQUIP_PARTS) {
+    eqSel("now", `${p}-enh`).value = EQ_DEFAULT.enh; eqSel("now", `${p}-ref`).value = EQ_DEFAULT.ref;
+    for (const side of ["now", "next"]) for (const i of OPT_LINES) eqSel(side, `${p}-s${i}`).value = STEP_MAX;
+  }
 }
 
 // ----- 화면 -> 장착 상태 -----
@@ -255,17 +305,22 @@ const shortSpan = (cdr, target) => target != null && cdr < target - 1e-9 ? `<spa
 /** 크리·극대 소켓 기준: 켜져 있으면 크리·극대 마법석 대신 끼울 마법석 ("소켓 교체 기준"에서 고른 것) */
 function socketRule() {
   if (!$("gear-ckb-sockets").checked) return null;
-  const stone = SWAP_STONES.find(x => x.key === $("gear-socket-stone").value) || SWAP_STONES[0];
-  return { partners: [{ name: stone.name, stats: stone.stats }] };
+  return { partners: [slotStone()] };
 }
-/** 소켓 교체 추천을 교체 결과 스탯창에 반영할지 */
+/** "소켓 교체 기준"에서 고른 마법석 (네블론 소켓 후보로도 쓴다) */
+function slotStone() {
+  const stone = SWAP_STONES.find(x => x.key === $("gear-socket-stone").value) || SWAP_STONES[0];
+  return { name: stone.name, stats: stone.stats };
+}
+/** 소켓 교체를 교체 결과 스탯창에 반영할지 */
 let applySockets = false;
 const SOCKET_STAT = { crit: "크리", maxi: "극대" };
 
 export function renderGear({ win, job, resist, setup, town }) {
-  lastCtx = { win, job, resist, setup, town, sockets: socketRule() };
+  lastCtx = { win, job, resist, setup, town, sockets: socketRule(), slotStone: slotStone() };
   sel("now", "town", "town").value = town;
   syncGrades();
+  syncEquip();
   const hasCdr = typeof win.cdr_cho === "number";
   $("gear-cdr-target").placeholder = hasCdr ? String(+(win.cdr_cho * 100).toFixed(2)) : "";
   $("gear-cdr-hint").textContent = hasCdr ? `비워 두면 스탯창 값(${trimPct(win.cdr_cho)})을 써요` : "스펙 계산에 초월한 스킬 재사용 시간 감소를 넣어야 지킬 수 있어요";
@@ -283,12 +338,16 @@ export function renderGear({ win, job, resist, setup, town }) {
   let html = `<div class="gear-gain ${r.gain > 1e-9 ? "up" : r.gain < -1e-9 ? "down" : ""}"><span class="v">${changed ? signed(r.gain) : "±0%"}</span><span class="k">DPS 변화 (지금 세팅 대비)</span></div>`;
   if (!changed) html += `<p class="hint">"바꿔 보기"에서 부위를 골라 보세요. 세트 효과가 켜지고 꺼지는 것까지 함께 계산해요.</p>`;
 
-  // 소켓 교체 추천 (크리·극대 소켓 기준으로 계산에 넣은 교체)
+  // 소켓 교체 (크리·극대 소켓 기준으로 계산에 넣은 교체)
   const swaps = r.swaps || [];
   if (swaps.length) {
     const by = new Map();
-    for (const x of swaps) { const key = x.dir < 0 ? `${SOCKET_STAT[x.k]} 6% → ${x.name}` : `${x.name} → ${SOCKET_STAT[x.k]} 6%`; by.set(key, (by.get(key) || 0) + 1); }
-    html += `<div class="socket-rec"><div class="k">소켓 교체 추천 · 위 DPS 변화에 들어 있어요</div><ul>${[...by].map(([t, n]) => `<li>${esc(t)} <b>${n}칸</b></li>`).join("")}</ul>` +
+    for (const x of swaps) {
+      const key = x.k === "slot" ? (x.dir > 0 ? `네블론 소켓 늘어남 → ${x.name}` : `${x.name} 빼기 (네블론 소켓 줄어듦)`)
+        : x.dir < 0 ? `${SOCKET_STAT[x.k]} 6% → ${x.name}` : `${x.name} → ${SOCKET_STAT[x.k]} 6%`;
+      by.set(key, (by.get(key) || 0) + 1);
+    }
+    html += `<div class="socket-rec"><div class="k">소켓 교체 · 위 DPS 변화에 들어 있어요</div><ul>${[...by].map(([t, n]) => `<li>${esc(t)} <b>${n}칸</b></li>`).join("")}</ul>` +
       `<label><input type="checkbox" id="gear-apply-sockets"${applySockets ? " checked" : ""}> 아래 스탯창(바꾼 뒤)에 소켓 교체 반영</label></div>`;
   }
 
@@ -350,8 +409,7 @@ export function renderGear({ win, job, resist, setup, town }) {
   if (ign.length) notes.push(`계산에 넣지 않은 옵션: ${ign.map(([k, v]) => `${IGNORED[k]} ${pctText(v)}`).join(", ")}`);
   const unknown = [...new Set([...r.before.unknown, ...r.after.unknown])];
   if (unknown.length) notes.push(`수치를 모르는 아이템은 효과가 없는 것으로 계산했어요: ${unknown.join(", ")}`);
-  if (swaps.length && applySockets) notes.push("스탯창의 \"바꾼 뒤\"는 소켓 교체 추천까지 반영한 값이에요.");
-  if (r.dropped && r.dropped.length) notes.push(`장비로 바뀐 ${r.dropped.map(k => `${SOCKET_STAT[k]} ${pctText(r.delta[k] || 0)}`).join(", ")}는 소켓(6%)을 바꿔도 이득이 없어서 DPS에서 뺐어요 (스탯창 표에는 그대로 보여요).`);
+  if (swaps.length && applySockets) notes.push("스탯창의 \"바꾼 뒤\"는 소켓 교체까지 반영한 값이에요.");
   if ([r.before.atma, r.after.atma].some(a => a.grade && !a.active)) notes.push("이 속성의 아트마 세트 효과는 데이터에 없어서 계산하지 않았어요.");
   if (["now", "next"].some(side => { const g = readGear(side); return g.normal.ring && g.normal.ring === g.normal.ring2; })) notes.push("같은 반지는 두 개 낄 수 없어요. 반지 1과 반지 2를 다르게 골라 주세요.");
   const pm = (k, name) => { const b = lastCtx.setup[k][0], a = r.setup[k][0]; return Math.abs(a - b) > 1e-9 ? `${name} ×${trimPct(b)} → ×${trimPct(a)}` : ""; };
@@ -623,11 +681,11 @@ export function initGear(onChange) {
   $("gear-ckb-sockets").addEventListener("change", () => { saveGear(); onChange(); });
   $("gear-socket-stone").addEventListener("change", () => { saveGear(); onChange(); });
   $("gear-reset-next").addEventListener("click", () => {
-    for (const e of allSelects()) if (e.id.startsWith("gear-next-")) e.value = SAME;
+    for (const e of allSelects()) if (e.id.startsWith("gear-next-") && [...e.options].some(o => o.value === SAME)) e.value = SAME;
     saveGear(); onChange();
   });
   $("gear-clear").addEventListener("click", () => {
-    for (const e of allSelects()) if (e.id.startsWith("gear-now-") && !/-eq-.+-(enh|ref)$/.test(e.id)) { e.value = e.id.includes("-grade-") ? "유니크" : e.id.endsWith("-element") ? "유수" : e.id.endsWith("-weapon") ? DEFAULT_WEAPON : ""; e.classList.remove("filled", "check"); }
+    for (const e of allSelects()) if (e.id.startsWith("gear-now-") && !/-eq-.+-(enh|ref|s\d)$/.test(e.id)) { e.value = e.id.includes("-grade-") ? "유니크" : e.id.endsWith("-element") ? "유수" : e.id.endsWith("-weapon") ? DEFAULT_WEAPON : ""; e.classList.remove("filled", "check"); }
     nowAvatarSets = null; lastShot = {};
     saveGear(); onChange();
   });
