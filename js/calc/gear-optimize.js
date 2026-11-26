@@ -10,6 +10,8 @@
 //   3) 어림값이 좋은 계획 몇십 개만 실제 계산기로 정확히 계산해서 가장 좋은 것을 고른다
 //   4) 아바타 쪽 -> 일반 악세 쪽 -> 한 벌·5셋 순서로 되풀이한다 (한쪽이 바뀌면 스탯 가치가 바뀌므로)
 //   5) 마지막으로 칸 하나 바꾸기·세트 채우기를 정확한 계산으로 더 좋아지지 않을 때까지 해 본다 (다듬기)
+//   6) 정리: 바꾼 칸을 지금 것으로 되돌려도 점수가 같으면 되돌린다. 한 칸씩, 그다음 두 칸·세 칸 묶음으로
+//      (예: 목걸이 양극화 2% -> 물마 2% 와 정령석 물마 2% -> 양극화 2% 를 같이 바꾸면 스탯이 같아서 굳이 바꿀 필요가 없다)
 //
 // 상한 초과(양극화·적응력·쿨감·실전 크리/극대 100%·점감 포화)는 DPS에 도움이 안 되므로, 넘은 1%p마다 DPS 0.01%만큼
 // 손해로 쳐서(OVER_PENALTY) DPS가 거의 같으면 넘치는 것이 적은 조합을 고르게 한다. 보여 주는 DPS 변화에는 이 몫이 없다.
@@ -249,10 +251,11 @@ function bestPlans(slots, groups, limit, keep) {
  *            start: 찾기 시작할 장착 상태 (없으면 now). 고정한 칸은 이 상태의 것을 그대로 둔다 (lockFrom 으로 만든다),
  *            cdrTarget: 지킬 초월 쿨감 (0.32 = 32%, 없으면 null),
  *            plans: 정확히 계산해 볼 계획 수, rounds: 마지막에 무작위로 흔들어 볼 횟수, kicks: 한 번에 흔드는 최대 개수, seed }
- * 반환   : { gear, gain, score, over, overNow, cdr, cdrMet, evals, plans, byTown }
+ * 반환   : { gear, gain, score, over, overNow, cdr, cdrMet, evals, plans, kept, byTown }
  *            gear: 찾은 장착 상태 (gear.town = 바꿀 마을 버프, 지금 그대로면 null), gain: 지금 대비 DPS 변화,
  *            score: gain - 상한 초과 몫 (찾을 때 쓴 점수), over / overNow: 바꾼 뒤 / 지금 상한 초과 합,
  *            cdr: 바꾼 뒤 초월 쿨감, cdrMet: 목표를 지켰는지, evals: 정확히 계산한 조합 수, plans: 어림해 본 세트 계획 수,
+ *            kept: 바꿔도 점수가 같아서 지금 것으로 되돌린 칸 수,
  *            byTown: 마을 버프마다 찾은 결과 [{ town: 버프 이름, gear, gain, cdr, cdrMet }] (좋은 순)
  *
  * 마을 버프는 적응력 상한과 얽혀 있어서(예: 수색대원의 결의로 적응력을 채우면 악세 칸을 딜 옵션에 쓸 수 있다) 따로 정하면 좋은 조합을 놓친다.
@@ -270,7 +273,7 @@ export function optimizeGear(ctx, now, opts = {}) {
     return Object.assign(r, { town: town || current });
   }));
   const best = byTown[0];
-  return { gear: best.gear, gain: best.gain, score: best.score, over: best.over, overNow: best.overNow, cdr: best.cdr, cdrMet: best.cdrMet, evals, plans, byTown };
+  return { gear: best.gear, gain: best.gain, score: best.score, over: best.over, overNow: best.overNow, cdr: best.cdr, cdrMet: best.cdrMet, kept: best.kept, evals, plans, byTown };
 }
 
 /**
@@ -633,9 +636,40 @@ function searchOne(ctx, now, start, { locked = [], cdrTarget = null, plans: keep
     const r = climb(n, value(n));
     if (r.v > cur + 1e-12) ({ g, v: cur } = r);
   }
+
+  // ----- 6) 정리: 바꿔도 점수가 같은 칸은 시작 상태(지금 것)로 되돌린다 -----
+  const SAME_SCORE = 1e-9;   // 스탯이 같으면 점수 차이는 계산 오차뿐이다
+  const graded = v => v.layer === "normal" && ATMA_GRADED.includes(v.slot);
+  const isChanged = v => v.get(g) !== v.get(start) || (graded(v) && g.atma.grades[v.slot] !== start.atma.grades[v.slot]);
+  const revert = list => {
+    const n = clone(g);
+    for (const v of list) { v.set(n, v.get(start)); if (graded(v)) n.atma.grades[v.slot] = start.atma.grades[v.slot]; }
+    return n;
+  };
+  const combos = (list, k, from = 0, acc = [], out = []) => {
+    if (acc.length === k) { out.push(acc.slice()); return out; }
+    for (let i = from; i < list.length; i++) { acc.push(list[i]); combos(list, k, i + 1, acc, out); acc.pop(); }
+    return out;
+  };
+  let kept = 0;
+  for (let found = true; found; ) {
+    found = false;
+    const changed = vars.filter(isChanged);
+    for (let size = 1; size <= Math.min(3, changed.length) && !found; size++) {
+      let best = null;
+      for (const list of combos(changed, size)) {
+        const n = revert(list);
+        if (!validRings(n)) continue;
+        const v = value(n);
+        if (v >= cur - SAME_SCORE && (!best || v > best.v)) best = { g: n, v };
+      }
+      if (best) { g = best.g; cur = Math.max(cur, best.v); kept += size; found = true; }
+    }
+  }
+
   const end = judge(g), gain = realScorer.evaluate(g).value - 1;
   return {
-    gear: g, gain, cdr: end.cdr, cdrMet: end.short === 0, evals, plans: planCount,
+    gear: g, gain, cdr: end.cdr, cdrMet: end.short === 0, evals, plans: planCount, kept,
     over: end.over, overNow: overTotal(ctx.win, ctx.setup, ctx.job, ctx.resist), score: gain - OVER_PENALTY * end.over,
   };
 }

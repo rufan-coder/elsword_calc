@@ -690,7 +690,8 @@ export function initGear(onChange) {
         : better
         ? `가장 좋은 조합을 "바꿔 보기"에 채웠어요${towns.length > 1 ? ` (마을 버프: ${best.town})` : ""}. 지금보다 DPS ${signed(best.gain)}${best.gain < -1e-9 ? " (상한 초과를 줄이느라 조금 낮아졌어요)" : ""}.${overText} 세트 조합 ${plans.toLocaleString("ko-KR")}가지를 따져 봤어요 (${sec}초).`
         : "지금 세팅이 이미 가장 좋아요.";
-      let html = `<span>${esc(head + cdrText(best) + (worn < 12 ? " 지금 세팅 칸이 많이 비어 있어서 변화가 실제보다 크게 나올 수 있어요. 지금 낀 것을 먼저 채워 주세요." : ""))}</span>`;
+      const keptText = best.kept ? ` 바꿔도 DPS가 똑같은 ${best.kept}칸은 지금 것 그대로 뒀어요.` : "";
+      let html = `<span>${esc(head + keptText + cdrText(best) + (worn < 12 ? " 지금 세팅 칸이 많이 비어 있어서 변화가 실제보다 크게 나올 수 있어요. 지금 낀 것을 먼저 채워 주세요." : ""))}</span>`;
       if (byTown.length > 1) {
         html += `<div class="town-pick"><span>마을 버프별 최고 조합 (누르면 그 조합으로 바꿔요)</span>` +
           byTown.map((x, i) => `<button type="button" data-i="${i}"${i === 0 ? ' class="on"' : ""}>${esc(x.town)}${x.town === ctx.town ? " (지금)" : ""} ${signed(x.gain)}${target != null && !x.cdrMet ? " · 쿨감 부족" : ""}</button>`).join("") + `</div>`;

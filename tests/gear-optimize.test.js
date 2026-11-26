@@ -218,3 +218,25 @@ test("자동 찾기: 고정한 칸은 start(화면에서는 \"바꿔 보기\")�
   assert.deepEqual(townsToTry({ ...ctx, town: "온천 버프" }, ["town"], { town: "엘 하우스(강화)" }), ["엘 하우스(강화)"]);
   assert.deepEqual(townsToTry({ ...ctx, town: "온천 버프" }, ["town"], { town: null }), [null]);
 });
+
+test("자동 찾기: 바꾼 칸을 지금 것으로 되돌려도 점수가 같으면 되돌린다 (한 칸~세 칸 묶음)", () => {
+  const now = Object.assign(structuredClone(NOW), { spirit: 1, avatar: { ...NOW.avatar, neck: "비타 폰타나 : 숨결의 크라바트" } });
+  const locked = ["normal.weapon", "normal.support", "normal.ear", "normal.ring", "normal.ring2", "element"];
+  const r = optimizeGear(ctx, now, { locked });
+  // 찾을 때와 같은 기준의 점수 (오래된 세트는 지금 켜져 있는 것만 센다)
+  const nowSets = new Set(gearEffects(now, ctx.job.type, now.avatarSets).sets.map(x => x.name));
+  const sc = gearScorer(ctx, now, { ignoreSets: new Set([...OPTIMIZE_SKIP_SETS].filter(n => !nowSets.has(n))) });
+  const score = g => { const e = sc.evaluate(g); return e.value - OVER_PENALTY * overTotal(e.real, e.setup, ctx.job, ctx.resist); };
+  const base = score(r.gear);
+  const slots = [...Object.keys(r.gear.avatar).map(k => ["avatar", k]), ["normal", "bottom"], ["wavatar"], ["outfit"], ["spirit"]]
+    .filter(([a, b]) => (b ? r.gear[a][b] : r.gear[a]) !== (b ? now[a][b] : now[a]));
+  const back = list => { const g = structuredClone(r.gear); for (const [a, b] of list) { if (b) g[a][b] = now[a][b]; else g[a] = now[a]; } return g; };
+  for (let i = 0; i < slots.length; i++) {
+    assert.ok(score(back([slots[i]])) < base - 1e-9, `${slots[i].join(".")} 하나만 되돌려도 점수가 같다`);
+    for (let j = i + 1; j < slots.length; j++) {
+      const g = back([slots[i], slots[j]]);
+      if (!g.normal.ring || g.normal.ring !== g.normal.ring2) assert.ok(score(g) < base - 1e-9, `${slots[i].join(".")}+${slots[j].join(".")} 를 되돌려도 점수가 같다`);
+    }
+  }
+  assert.equal(typeof r.kept, "number");
+});
