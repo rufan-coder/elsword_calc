@@ -167,7 +167,7 @@ table.gear tr.atma td { padding-bottom: 8px; }
 .pick.eq select { padding-left: 5px; padding-right: 2px; font-size: 12px; }
 .pick.eq select.n { flex: 0 0 68px; }
 .pick.eq select.n.lv { flex-basis: 56px; }
-.eq-opts { display: flex; flex-direction: column; gap: 4px; }
+.eq-opts, .eq-extra { display: flex; flex-direction: column; gap: 4px; }
 .eq-opts[hidden], table.gear tr[hidden] { display: none; }
 table.gear tr.eq-opt td.lbl { color: var(--muted); font-size: 12px; }
 @media (min-width: 861px) { #page-gear .cols { grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); } }

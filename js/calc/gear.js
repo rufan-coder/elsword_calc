@@ -13,6 +13,7 @@
 //     equip:   { top, bottom, gloves, shoes, set } | null   방어구. 부위마다 { type: "네블론", enh: 강화, ref: 재련, opts } 또는 null,
 //              opts: 네블론 옵션 변환 [{ name: ARMOR_REROLL 이름, step: 1~10 }, ...] (네블론만, 3줄까지)
 //              cart: 네블론 카트리지 { name: CARTRIDGES 이름, lv: 1~6 } 또는 null (네블론만)
+//              sijum: 추가 효과 (시줌) [{ name: ARMOR_SIJUM 이름, step: 1~ }, ...] (모든 방어구, 3줄까지)
 //              set: 4세트 이름 (js/data/equipment.js 의 ARMOR_SETS). 지금 방어구를 넣은 부위만 계산한다
 //   }
 //
@@ -35,7 +36,7 @@ import { resolve, dpsIndex, has } from "./stats.js";
 import { setupWithTown, buffItems } from "./buffs.js";
 import { BUFF_ITEMS } from "../data/buffs.js";
 import { CRIT_MAXI_PER_SLOT } from "../data/stones.js";
-import { ARMOR_TYPES, ARMOR_PART_ENHANCE, ARMOR_SETS, ARMOR_REROLL, CARTRIDGES } from "../data/equipment.js";
+import { ARMOR_TYPES, ARMOR_PART_ENHANCE, ARMOR_SETS, ARMOR_REROLL, ARMOR_SIJUM, CARTRIDGES } from "../data/equipment.js";
 
 const ACC_BY_NAME = new Map([...ACCESSORIES, ...NEW_ACCESSORIES].map(a => [a.name, a]));
 const WAVATAR_BY_NAME = new Map(WEAPON_AVATARS.map(w => [w.name, w]));
@@ -122,6 +123,10 @@ function addEquip(acc, equip, atkType, cart = equipCartridges(equip)) {
     addStats(acc, equipStats(enh), atkType);
     addStats(acc, equipStats(ref), atkType);
     acc.fixedAtk += ref.fixed_atk || 0;
+    for (const o of e.sijum || []) {   // 추가 효과 (시줌): 크리·극대는 점감 전 합연, 모스뎀은 합연
+      const def = ARMOR_SIJUM[o.name], v = def && def.steps[o.step - 1];
+      if (v) addStats(acc, partStat(def.stat, v), atkType);
+    }
     if (t.nebulon) {
       acc.nebulon++;
       for (const o of e.opts || []) {   // 옵션 변환 (합연). "강화 1당" 옵션은 그 부위 강화 수치를 곱한다
