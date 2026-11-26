@@ -31,7 +31,11 @@ const overText = (v, k, prefix = "") => `<span class="over" title="${CAP_NOTES[k
 // 크뎀·보뎀이 어디서 왔는지 작은 글씨로: "스탯창 199.4% · 패시브 +20% · 파티 버프 ×10% ..."
 const PARTS_NOTE = "+는 합연산, ×는 곱연산(기본 크뎀 150%에만 곱해요)이에요. 밑줄 친 항목에 마우스를 올리면 어떤 패시브인지 나와요.";
 const plus = x => "+" + trimPct(x), times = x => "×" + trimPct(x);
-const ASPD_NOTE = "×는 곱연산이에요. 곱연산 버프끼리 곱해서 ×1.4까지, 최종 동작 속도는 70%까지 올라요.";
+const ASPD_NOTE = "×는 곱연산(서로 곱해서 ×1.4까지), +는 점감 합연(스탯창과 같이 점감을 받고 30%까지), 무점감은 70% 천장 뒤에 그대로 더해져요.";
+const ASPD_KIND = { mult: "곱연", dim: "점감 합연", flat: "무점감" };
+/** 전직 동속 패시브·버프 한 줄의 값 글자: ×10% / +10% / 무점감 +8% */
+const aspdSkillValue = s => (s.kind === "mult" ? "×" : s.kind === "flat" ? "무점감 +" : "+") + trimPct(s.v);
+const aspdSkillTip = s => [`${ASPD_KIND[s.kind]}${s.guess ? " (정확히 모름, 곱연으로 계산)" : ""}`, s.dur, s.note].filter(Boolean).join(" · ");
 /** parts: [이름, 값 글자, 툴팁] 목록. 값이 0인 항목은 미리 빼고 넘긴다 */
 function partsHtml(parts, note = PARTS_NOTE) {
   const items = parts.filter(Boolean).map(([label, value, tip]) => `<span${tip ? ` class="src" title="${esc(tip)}"` : ""}>${label} ${value}</span>`);
@@ -106,15 +110,27 @@ export function renderSummary(ctx) {
   if (over.polar) tiles.push(["양극화", fmt(POLAR_CAP, 1), overText(over.polar, "polar"), "", CAP_NOTES.polar]);
   // 동작 속도: DPS에는 안 넣는다. 평소/격려 중 실전 값, 격려 중 천장(70%)까지 필요한 스탯창 값
   if (has(win, "aspd")) {
-    const mults = setup.aspd_mults || [], a = aspdCalc(win.aspd, mults.map(x => x.v)), party = mults.some(x => x.name === "파티");
+    const skills = setup.aspd_class || [], on = k => skills.filter(s => s.on && s.kind === k);
+    const mults = (setup.aspd_mults || []).concat(on("mult")), party = mults.some(x => x.name === "파티");
+    const a = aspdCalc(win.aspd, mults.map(x => x.v), ASPD.encourage, on("dim").map(s => s.v), on("flat").map(s => s.v));
     const seg = `<span class="seg" role="group" aria-label="동작 속도 기준">` +
       [["1", "파티", "파티 동속 9% 포함"], ["0", "솔로", "파티 동속 없이"]].map(([v, label, tip]) =>
         `<button type="button" data-aspd-party="${v}" aria-pressed="${(v === "1") === party}" title="${tip}">${label}</button>`).join("") + `</span>`;
     const line = a.over > 5e-5 ? overText(a.over, "aspd", "스탯창 ") + " (격려 중 천장)"
       : a.need != null ? `격려 중 천장까지 스탯창 ${trimPct(a.need)}` : "격려 중에도 천장(70%)에 못 닿아요";
+    // 켜고 끌 수 있는 전직 패시브·버프 (표의 "선택사항")
+    const opts = skills.filter(s => s.toggle);
+    const toggles = opts.length ? `<div class="aspd-skills" role="group" aria-label="켜고 끌 수 있는 동속 패시브·버프">` + opts.map(s =>
+      `<button type="button" data-aspd-skill="${esc(s.key)}" aria-pressed="${s.on}" title="${esc(aspdSkillTip(s))}">${esc(s.name)} ${aspdSkillValue(s)}</button>`).join("") + `</div>` : "";
+    const statText = on("dim").length ? `${trimPct(Math.min(win.aspd, ASPD.window_cap))} → ${trimPct(a.stat)}` : trimPct(Math.min(win.aspd, ASPD.window_cap));
     tiles.push(["동작 속도 (평소/격려 중)", `${fmt(a.normal, 1)}/${fmt(a.enc, 1)}`, line, "wide",
-      "DPS에는 넣지 않아요. 무점감 동속 패시브(극소수 전직)는 빠져 있어요.",
-      [["스탯창", trimPct(Math.min(win.aspd, ASPD.window_cap))], ...mults.map(x => [x.name, times(x.v)]), ["격려", times(ASPD.encourage) + " (격려 중)"]], ASPD_NOTE, seg]);
+      "DPS에는 넣지 않아요. 전직 패시브·버프는 정리해 둔 표 기준이고, 아래 버튼은 켜고 끌 수 있는 것이에요.",
+      [["스탯창", statText, on("dim").length ? "점감 합연 패시브를 더해 다시 점감을 건 값 (30%까지)" : ""],
+        ...on("dim").map(s => [s.name, aspdSkillValue(s), aspdSkillTip(s)]),
+        ...(setup.aspd_mults || []).map(x => [x.name, times(x.v)]),
+        ...on("mult").map(s => [s.name, times(s.v), aspdSkillTip(s)]),
+        ["격려", times(ASPD.encourage) + " (격려 중)"],
+        ...on("flat").map(s => [s.name, aspdSkillValue(s), aspdSkillTip(s)])], ASPD_NOTE, seg, toggles]);
   }
   // 초목: 크뎀 곱연산 30%를 얻고 보뎀 한 칸을 뺐을 때. "사냥석 뺀 기준/힘트마 뺀 기준"
   const chomok = (setup.item_cd || []).some(x => x.slot === "atma" && x.name === "초목의 아트마") ? null : chomokGain(win, job, resist, setup);   // 이미 초목이면 안 보여 준다
@@ -123,7 +139,7 @@ export function renderSummary(ctx) {
   const html = tiles.length
     ? tiles.map(t => `<div class="tile${t[3] ? " " + t[3] : ""}"${t[4] ? ` title="${t[4]}"` : ""}>` +
         (t[7] ? `<div class="k with-seg"><span>${t[0]}</span>${t[7]}</div>` : `<div class="k">${t[0]}</div>`) + `<div class="v">${t[1]}</div>` +
-        (t[2] ? `<div class="from">${t[2]}</div>` : "") + (t[5] ? partsHtml(t[5], t[6]) : "") + `</div>`).join("")
+        (t[2] ? `<div class="from">${t[2]}</div>` : "") + (t[5] ? partsHtml(t[5], t[6]) : "") + (t[8] || "") + `</div>`).join("")
     : `<p class="hint">스탯창 값을 입력하면 버프와 패시브가 반영된 수치가 여기에 나와요.</p>`;
   // 바뀐 게 없으면 다시 그리지 않는다: 입력칸에서 빠져나올 때(change) 다시 그리면 그 사이에 누른 타일 안 버튼(파티/솔로)의 클릭이 사라진다
   if (html !== lastTilesHtml) { $("tiles").innerHTML = html; lastTilesHtml = html; }

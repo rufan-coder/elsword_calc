@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@500;600;700&family=Noto+Sans+KR:wght@400;500;700&display=swap">
 <link rel="stylesheet" href="css/style.css">
-<meta name="build" content="ver.1.2.21">
+<meta name="build" content="ver.1.2.22">
 <script>
 // 배포 직후에는 브라우저에 새 파일과 예전 파일이 섞여 남을 수 있다 (js/build.js 참고).
 // 그 상태로 열려서 시작 중에 오류가 나면, 이 페이지가 쓰는 파일을 전부 새로 받아 딱 한 번만 다시 연다.
@@ -146,6 +146,7 @@
         <h2>실전 수치 <small>버프 · 직업 패시브 · 크리저항 반영</small></h2>
         <div class="tiles" id="tiles"></div>
         <select id="aspd_party" hidden aria-hidden="true" tabindex="-1"><option value="1">파티</option><option value="0">솔로</option></select><!-- 동작 속도 파티/솔로 기준: 실전 수치의 동작 속도 칸에서 바꾼다 -->
+        <input type="hidden" id="aspd_skills"><!-- 전직 동속 패시브·버프를 켜고 끈 것 (JSON): 실전 수치의 동작 속도 칸에서 바꾼다 -->
       </section>
 
       <div class="tabs" role="tablist" aria-label="계산 도구">

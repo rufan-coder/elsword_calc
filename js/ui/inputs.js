@@ -8,6 +8,11 @@ import { MAX_ENHANCE, BUFF_ITEMS } from "../data/buffs.js";
 import { hasAtkPct, statAtkPct } from "../calc/stats.js";
 import { buildSetup } from "../calc/buffs.js";
 
+/** 동속 패시브·버프를 켜고 끈 것 (숨은 칸 aspd_skills 의 JSON). 못 읽으면 빈 값 */
+function readAspdSkills() {
+  try { const o = JSON.parse($("aspd_skills").value || "{}"); return o && typeof o === "object" ? o : {}; } catch (e) { return {}; }
+}
+
 /** 고르는 칸(전직, 던전, 강화 수치)의 선택지를 데이터에서 채운다 */
 export function initInputs() {
   for (const name of Object.keys(CLASS)) $("cls").add(new Option(name, name));
@@ -20,6 +25,17 @@ export function initInputs() {
     sel.value = b.dataset.aspdParty;
     sel.dispatchEvent(new Event("change", { bubbles: true }));
     const again = $("tiles").querySelector(`[data-aspd-party="${b.dataset.aspdParty}"]`);
+    if (again) again.focus();
+  });
+  // 동작 속도 칸의 전직 패시브·버프 버튼 -> 켜고 끈 것을 숨은 aspd_skills 에 적고 다시 계산
+  $("tiles").addEventListener("click", e => {
+    const b = e.target.closest("[data-aspd-skill]");
+    if (!b) return;
+    const o = readAspdSkills(), key = b.dataset.aspdSkill;
+    o[key] = b.getAttribute("aria-pressed") !== "true";
+    $("aspd_skills").value = JSON.stringify(o);
+    $("aspd_skills").dispatchEvent(new Event("change", { bubbles: true }));
+    const again = [...$("tiles").querySelectorAll("[data-aspd-skill]")].find(x => x.dataset.aspdSkill === key);
     if (again) again.focus();
   });
   for (const [id, slot] of [["acc_face_top", "face_top"], ["acc_ear", "ear"]]) {
@@ -58,6 +74,7 @@ export function readInputs() {
     stoneCdr: pctOrZero("enc_cdr"), stoneDur: pctOrZero("enc_dur"),
     faceTop: $("acc_face_top").value, ear: $("acc_ear").value, battle: num("acc_battle") || 0,
     party: $("aspd_party").value === "1", atma: $("acc_atma").value,
+    cls, aspdSkills: readAspdSkills(),
   });
   setup.debuff = DUNGEONS[dungeon].debuff;   // 적응력 계산에 쓴다
   return { cls, job: withClassSkill(cls, $("cls_skill").value), dungeon, resist: DUNGEONS[dungeon].critResist, win, setup, town: $("town").value, buffs: detail, shareBlank: $("share_cho").value === "" };

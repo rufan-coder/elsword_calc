@@ -74,6 +74,9 @@ details[open] > summary { margin-bottom: 12px; }
 .seg button { border: 0; border-radius: 999px; background: transparent; padding: 1px 8px; font-size: 11px; line-height: 1.5; color: var(--muted); }
 .seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 .tile .parts .src { text-decoration: underline dotted; text-underline-offset: 2px; cursor: help; }
+.aspd-skills { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.aspd-skills button { border: 1px solid var(--line); border-radius: 999px; background: var(--panel); padding: 1px 8px; font-size: 11px; line-height: 1.5; color: var(--muted); text-decoration: line-through; }
+.aspd-skills button[aria-pressed="true"] { background: var(--accent-soft); border-color: transparent; color: var(--accent); font-weight: 600; text-decoration: none; }
 
 .opts { display: flex; flex-direction: column; gap: 8px; }
 .opt { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.2fr) minmax(0, .8fr) auto; gap: 6px; align-items: center; }

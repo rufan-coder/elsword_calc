@@ -1,7 +1,7 @@
 // 버프 세팅(마을 버프, 장비 강화, 격려)을 계산에 쓰는 수치로 바꾼다.
 
 import { TOWN_BUFFS, ENHANCE_BASE_PERCENT, YELLOW_ARTIFACT, PARTY_CRIT_DAMAGE, GUILD_BOSS_DAMAGE, ENCOURAGE, BUFF_ITEMS } from "../data/buffs.js";
-import { aspdBuffs } from "./aspd.js";
+import { aspdBuffs, classAspd } from "./aspd.js";
 import { ATMA } from "../data/accessories.js";
 
 /**
@@ -44,10 +44,11 @@ export function atmaItems(element) {
 
 /**
  * 화면에서 고른 버프 세팅을 resolve()가 받는 setup으로 만든다.
- * choice: { town, pantsEnhance, shoesEnhance, yellow, stoneCdr, stoneDur, faceTop, ear, battle, party, atma }
+ * choice: { town, pantsEnhance, shoesEnhance, yellow, stoneCdr, stoneDur, faceTop, ear, battle, party, atma, cls, aspdSkills }
  *   atma : 아트마 세트 속성 ("유수" | "초목" | ""). 유니크 기준. 초목은 기본 크뎀 곱연산(유니크 30%)이 붙고,
  *          유수는 최종 데미지라 스펙 계산에는 영향이 없다 (초목의 크리 -6%는 스탯창에 이미 보인다)
  *   party: 동작 속도 파티 기준이면 true (파티 동속 곱연산을 넣는다. 크뎀 파티 버프와는 상관없음)
+ *   cls, aspdSkills: 전직과 동속 패시브·버프를 켜고 끈 것 { "전직|스킬 이름": true/false } (동작 속도에만 쓴다)
  * 반환: { setup, detail } - detail은 화면에 "적용 값"으로 보여 주기 위한 중간 수치
  */
 export function buildSetup(choice) {
@@ -67,6 +68,7 @@ export function buildSetup(choice) {
     guild_boss: GUILD_BOSS_DAMAGE,
     enc_uptime: enc.uptime,
     aspd_mults: aspdBuffs(choice.faceTop, choice.party !== false),   // 동작 속도 곱연산 버프 (격려 제외. DPS에는 안 씀)
+    aspd_class: choice.cls ? classAspd(choice.cls, choice.aspdSkills || {}) : [],   // 전직 동속 패시브·버프 (곱연·점감 합연·무점감)
   };
   return { setup, detail: { town, pants, shoes, yellow, enc, items } };
 }
