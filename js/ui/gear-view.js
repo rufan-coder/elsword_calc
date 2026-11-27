@@ -290,7 +290,7 @@ function readGear(side) {
     g.atma.grades[slot] = side === "next" && v === SAME ? $(`gear-now-grade-${slot}`).value : v;
   }
   g.equip = readEquip(side);
-  if (side === "now") g.avatarSets = nowAvatarSets;
+  g.avatarSets = side === "now" ? nowAvatarSets : nextAvatarSets;
   return g;
 }
 
@@ -308,6 +308,7 @@ const readLocks = () => [...document.querySelectorAll("#gear-tables input[data-l
 
 /** 자동 찾기 결과를 "바꿔 보기" 칸에 채운다. 지금과 같은 칸은 "그대로" */
 function fillNext(g) {
+  nextAvatarSets = null;   // 채운 조합에서 가장 좋은 무악 세트로 다시 고른다
   const now = readGear("now");
   const wear = (x, slot) => slot === "outfit" ? x.outfit : slot === "wavatar" ? x.wavatar : x.armor.hair;
   for (const [group, slot] of ROWS) {
@@ -335,8 +336,10 @@ const WINDOW_STATS = [
   ["adapt", "적응력"], ["super_adapt", "초적응력"], ["cdr_gang", "강렬한 스킬 재사용 시간 감소"], ["cdr_cho", "초월한 스킬 재사용 시간 감소"],
 ];
 
-// ----- 무악 세트를 4개 이상 맞췄을 때 "지금" 켜 둔 세트 -----
-let nowAvatarSets = null;
+// ----- 무악 세트를 4개 이상 맞췄을 때 켤 세트 (3개까지) -----
+// nowAvatarSets : "지금" 게임에서 켜 둔 세트 (스탯창에 그 효과가 들어 있다). null 이면 개수가 많은 순
+// nextAvatarSets: "바꾼 뒤" 켜 볼 세트. 체크를 빼면 그 세트 효과만큼 빼고, 넣으면 더한다. null 이면 가장 좋은 조합
+let nowAvatarSets = null, nextAvatarSets = null;
 
 // ----- 결과 -----
 /** 0.025 -> "+2.5%", -0.1 -> "−10%" (소수 둘째 자리까지, 뒤의 0은 뗀다) */
@@ -416,7 +419,14 @@ export function renderGear({ win, job, resist, setup, town }) {
 
   // 세트 효과
   const names = [...new Set([...r.before.sets, ...r.after.sets].map(s => s.name))];
-  const cell = s => !s ? `<span class="muted">-</span>` : s.active ? stagesText(s) : `<span class="muted">${stagesText(s)} · 꺼짐</span>`;
+  // 무악 세트가 4개 이상인 쪽은 칸마다 체크 칸을 붙여 켤 세트를 고르게 한다 (지금: 게임에서 켜 둔 것, 바꾼 뒤: 켜 볼 것)
+  const pickNow = r.before.avatarSetCount > AVATAR_SET_LIMIT, pickNext = r.after.avatarSetCount > AVATAR_SET_LIMIT;
+  const cell = (s, side) => {
+    if (!s) return `<span class="muted">-</span>`;
+    const text = s.active ? stagesText(s) : `<span class="muted">${stagesText(s)} · 꺼짐</span>`;
+    return s.kind === "avatar" && (side === "now" ? pickNow : pickNext)
+      ? `<label class="avs"><input type="checkbox" data-avs="${side}" value="${esc(s.name)}"${s.active ? " checked" : ""}> ${text}</label>` : text;
+  };
   const atmaCell = a => a.grade ? (a.active ? `${a.element} · ${a.grade} (${a.count}개)` : `<span class="muted">${a.element} · 효과 없음</span>`) : `<span class="muted">${a.count}개 (4개부터)</span>`;
   const eqCell = s => !s ? `<span class="muted">-</span>` : s.active ? esc(setLabel(s.name)) : `<span class="muted">${esc(setLabel(s.name))} · 꺼짐</span>`;
   const eqSet = r.before.equipSet || r.after.equipSet;
@@ -425,7 +435,7 @@ export function renderGear({ win, job, resist, setup, town }) {
     for (const n of names) {
       const b = r.before.sets.find(s => s.name === n), a = r.after.sets.find(s => s.name === n);
       const diff = JSON.stringify(b && b.active && b.stages) !== JSON.stringify(a && a.active && a.stages);
-      html += `<tr class="${diff ? "diff" : ""}"><td>${esc(n)}</td><td>${cell(b)}</td><td>${cell(a)}</td></tr>`;
+      html += `<tr class="${diff ? "diff" : ""}"><td>${esc(n)}</td><td>${cell(b, "now")}</td><td>${cell(a, "next")}</td></tr>`;
     }
     if (r.before.atma.count || r.after.atma.count) {
       const diff = JSON.stringify([r.before.atma.grade, r.before.atma.element, r.before.atma.active]) !== JSON.stringify([r.after.atma.grade, r.after.atma.element, r.after.atma.active]);
@@ -438,12 +448,14 @@ export function renderGear({ win, job, resist, setup, town }) {
     html += `</tbody></table></div>`;
   }
 
-  // 무악 세트 고르기 (지금 세팅이 4개 이상일 때)
-  if (r.before.avatarSetCount > AVATAR_SET_LIMIT) {
-    const list = r.before.sets.filter(s => s.kind === "avatar");
-    html += `<div class="sub">지금 켜 둔 무악 세트 (${AVATAR_SET_LIMIT}개)</div><div class="checks" id="gear-avatar-sets">` +
-      list.map(s => `<label><input type="checkbox" value="${esc(s.name)}"${s.active ? " checked" : ""}> ${esc(s.name)}</label>`).join("") + `</div>` +
-      `<p class="hint">무악 세트 효과는 ${AVATAR_SET_LIMIT}개까지만 켜져요. 게임에서 켜 둔 세트를 골라 주세요. 바꾼 뒤는 가장 좋은 조합으로 계산해요.</p>`;
+  // 무악 세트 고르기 안내 (어느 쪽이든 4개 이상일 때)
+  if (pickNow || pickNext) {
+    html += `<ul class="hint-list">` +
+      `<li>무악 세트 효과는 ${AVATAR_SET_LIMIT}개까지만 켜져요. 위 표의 체크로 켤 세트를 골라 주세요.</li>` +
+      `<li><b>지금</b>: 게임에서 지금 켜 둔 세트예요. 스탯창에 이 세트 효과가 이미 들어 있어요.</li>` +
+      `<li><b>바꾼 뒤</b>: 켜 볼 세트예요. 체크를 빼면 그 세트 효과만큼 빼고, 체크하면 더해서 계산해요.</li>` +
+      (nextAvatarSets ? `<li>바꾼 뒤는 고른 세트로 계산하고 있어요. <button type="button" class="link" id="gear-avs-auto">가장 좋은 조합으로 되돌리기</button></li>`
+        : `<li>바꾼 뒤를 따로 고르지 않으면 가장 좋은 조합으로 계산해요.</li>`) + `</ul>`;
   }
 
   // 스탯창 전체: 지금 -> 바꾼 뒤 (바뀐 줄은 굵게)
@@ -532,7 +544,7 @@ function allSelects() { return [...document.querySelectorAll("#gear-tables selec
 const DEFAULT_WEAPON = "사룡무";
 
 function saveGear() {
-  const s = { v: 2, sel: Object.fromEntries(allSelects().map(e => [e.id, e.value])), avatarSets: nowAvatarSets, locks: readLocks(), lockVersion: LOCK_VERSION, cdrTarget: $("gear-cdr-target").value, ckbSockets: $("gear-ckb-sockets").checked, socketStone: $("gear-socket-stone").value, applySockets };
+  const s = { v: 2, sel: Object.fromEntries(allSelects().map(e => [e.id, e.value])), avatarSets: nowAvatarSets, nextAvatarSets, locks: readLocks(), lockVersion: LOCK_VERSION, cdrTarget: $("gear-cdr-target").value, ckbSockets: $("gear-ckb-sockets").checked, socketStone: $("gear-socket-stone").value, applySockets };
   try { localStorage.setItem(KEY, JSON.stringify(s)); } catch (e) { /* 저장이 막힌 환경 */ }
 }
 /** 기본 고정: 일반 악세 쪽은 DEFAULT_LOCKS 대로, 아바타 쪽은 keep 에 있는 것만 */
@@ -553,6 +565,7 @@ function loadGear() {
     if (s.v === 1 && s.sel && s.sel["gear-now-weapon-weapon"] === "") delete s.sel["gear-now-weapon-weapon"];   // 무기 기본값(사룡무)이 없던 때
     for (const e of allSelects()) if (s.sel && e.id in s.sel && [...e.options].some(o => o.value === s.sel[e.id])) { e.value = s.sel[e.id]; restored.add(e.id); }
     nowAvatarSets = Array.isArray(s.avatarSets) ? s.avatarSets : null;
+    nextAvatarSets = Array.isArray(s.nextAvatarSets) ? s.nextAvatarSets : null;
     if (Array.isArray(s.locks)) {
       if ((s.lockVersion || 1) < LOCK_VERSION) applyDefaultLocks(s.locks);   // 기본 고정이 바뀐 뒤 처음: 일반 악세 쪽만 기본값으로
       else for (const e of document.querySelectorAll("#gear-tables input[data-lock]")) e.checked = s.locks.includes(e.dataset.lock);
@@ -676,6 +689,7 @@ export function initGear(onChange) {
   tables.addEventListener("change", e => {
     const t = e.target;
     if (t.classList) t.classList.remove("filled", "check");
+    if (t.id && t.id.startsWith("gear-next-")) nextAvatarSets = null;   // 바꿔 보기를 바꾸면 켤 세트도 다시 가장 좋은 조합으로
     if (t.id && t.id.startsWith("gear-now-") && lastShot[t.id]) {   // 사용자가 고친 칸의 아이콘을 기억 (5셋은 다섯 칸 모두)
       for (const { g, s, f } of lastShot[t.id]) if (f) learn(g, s, t.value, f);
     }
@@ -684,11 +698,18 @@ export function initGear(onChange) {
   // 결과 칸의 체크박스는 "input"에서 받는다: 화면 전체가 input 때 다시 그려져서, change 때는 이미 지워진 칸이라 여기까지 오지 않는다
   $("gear-out").addEventListener("input", e => {
     if (e.target.id === "gear-apply-sockets") { applySockets = e.target.checked; saveGear(); onChange(); return; }
-    if (!e.target.closest("#gear-avatar-sets")) return;
-    const boxes = [...document.querySelectorAll("#gear-avatar-sets input")];
+    const side = e.target.dataset && e.target.dataset.avs;
+    if (!side) return;
+    const boxes = [...document.querySelectorAll(`#gear-out input[data-avs="${side}"]`)];
     let on = boxes.filter(b => b.checked).map(b => b.value);
     if (on.length > AVATAR_SET_LIMIT) { e.target.checked = false; on = on.filter(n => n !== e.target.value); }
-    nowAvatarSets = on.length ? on : null;
+    if (side === "now") nowAvatarSets = on.length ? on : null;
+    else nextAvatarSets = on.length ? on : null;
+    saveGear(); onChange();
+  });
+  $("gear-out").addEventListener("click", e => {
+    if (e.target.id !== "gear-avs-auto") return;
+    nextAvatarSets = null;
     saveGear(); onChange();
   });
   $("gear-optimize").addEventListener("click", async () => {
@@ -753,11 +774,12 @@ export function initGear(onChange) {
   $("gear-socket-stone").addEventListener("change", () => { saveGear(); onChange(); });
   $("gear-reset-next").addEventListener("click", () => {
     for (const e of allSelects()) if (e.id.startsWith("gear-next-") && [...e.options].some(o => o.value === SAME)) e.value = SAME;
+    nextAvatarSets = null;
     saveGear(); onChange();
   });
   $("gear-clear").addEventListener("click", () => {
     for (const e of allSelects()) if (e.id.startsWith("gear-now-") && !/-eq-.+-(enh|ref|s\d|clv|jv\d)$/.test(e.id)) { e.value = e.id.includes("-grade-") ? "유니크" : e.id.endsWith("-element") ? "유수" : e.id.endsWith("-weapon") ? DEFAULT_WEAPON : ""; e.classList.remove("filled", "check"); }
-    nowAvatarSets = null; lastShot = {};
+    nowAvatarSets = null; nextAvatarSets = null; lastShot = {};
     saveGear(); onChange();
   });
 
