@@ -215,13 +215,14 @@ test("방어구: 네블론이 있으면 글리터의 훈장은 그 카트리지 
   assert.deepEqual([exa.cdMults, exa.finals], [[0.01], [0.0973]]);    // 네블론이 없으면 지금처럼 버프 세팅 개수·아이템 값
 });
 
-test("방어구: 시줌(추가 효과)은 모든 방어구에 붙고, 크리·극대는 점감 전 합연, 모스뎀은 합연으로 더한다", () => {
+test("방어구: 시줌(추가 효과)은 엑사·테네에만 붙고 (네블론은 없음), 크리·극대는 점감 전 합연, 모스뎀은 합연으로 더한다", () => {
   const fx = (type, sijum) => gearEffects(gear({ equip: { top: { type, enh: 0, ref: 0, sijum }, set: null } }), "물리").visible;
   const lines = [{ name: "크리티컬", step: 3 }, { name: "극대화", step: 1 }, { name: "모스뎀", step: 1 }];
-  for (const type of ["엑사스케일", "테네브로스", "네블론"]) {
+  for (const type of ["엑사스케일", "테네브로스"]) {
     const a = fx(type, lines), b = fx(type, []);
     near(a.crit - (b.crit || 0), 0.02, 12); near(a.maxi - (b.maxi || 0), 0.01, 12); near(a.all_skill - (b.all_skill || 0), 0.005, 12);
   }
+  assert.deepEqual(fx("네블론", lines), fx("네블론", []));   // 네블론에는 시줌이 없어서 넣어도 계산하지 않는다
   // 크리 2% 는 스탯창 크리에 점감 전 값으로 더해진다 (다른 악세의 크리와 같다)
   const r = compareGear(ctx, gear({ equip: { top: { type: "엑사스케일", enh: 0, ref: 0, sijum: [] }, set: null } }), gear({ equip: { top: { type: "엑사스케일", enh: 0, ref: 0, sijum: [{ name: "크리티컬", step: 3 }] }, set: null } }));
   near(r.delta.crit, 0.02, 12);

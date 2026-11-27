@@ -13,7 +13,7 @@
 //     equip:   { top, bottom, gloves, shoes, set } | null   방어구. 부위마다 { type: "네블론", enh: 강화, ref: 재련, opts } 또는 null,
 //              opts: 네블론 옵션 변환 [{ name: ARMOR_REROLL 이름, step: 1~10 }, ...] (네블론만, 3줄까지)
 //              cart: 네블론 카트리지 { name: CARTRIDGES 이름, lv: 1~6 } 또는 null (네블론만)
-//              sijum: 추가 효과 (시줌) [{ name: ARMOR_SIJUM 이름, step: 1~ }, ...] (모든 방어구, 3줄까지)
+//              sijum: 추가 효과 (시줌) [{ name: ARMOR_SIJUM 이름, step: 1~ }, ...] (엑사·테네만, 3줄까지. 네블론에는 시줌이 없다)
 //              set: 4세트 이름 (js/data/equipment.js 의 ARMOR_SETS). 지금 방어구를 넣은 부위만 계산한다
 //   }
 //
@@ -123,7 +123,7 @@ function addEquip(acc, equip, atkType, cart = equipCartridges(equip)) {
     addStats(acc, equipStats(enh), atkType);
     addStats(acc, equipStats(ref), atkType);
     acc.fixedAtk += ref.fixed_atk || 0;
-    for (const o of e.sijum || []) {   // 추가 효과 (시줌): 크리·극대는 점감 전 합연, 모스뎀은 합연
+    for (const o of t.nebulon ? [] : e.sijum || []) {   // 추가 효과 (시줌): 엑사·테네만 (네블론은 시줌 대신 옵션 변환). 크리·극대는 점감 전 합연, 모스뎀은 합연
       const def = ARMOR_SIJUM[o.name], v = def && def.steps[o.step - 1];
       if (v) addStats(acc, partStat(def.stat, v), atkType);
     }

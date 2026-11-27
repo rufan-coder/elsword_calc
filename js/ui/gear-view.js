@@ -101,9 +101,9 @@ const CART_EFFECT = {
 const cartLabel = n => `${n.replace(/^하이퍼 카트리지 \[(.+)\]$/, "$1").replace(/ 카트리지 Type - /, "")} (${CART_EFFECT[n]})`;
 // 고를 수 있는 것: 효과를 아는 것만. 딜러에게 의미 없는 서플라이·앰플리파이어·택티컬·서포트3·클래식3~5는 뺀다
 const CART_CHOICES = Object.keys(CARTRIDGES).filter(n => CART_EFFECT[n]).map(n => [n, cartLabel(n)]), CART_LV_MAX = "6";
-// 추가 효과 (시줌): 모든 방어구, 부위마다 3줄. 수치 단계가 하나뿐인 옵션(모스뎀)은 수치 칸을 숨긴다
-const SIJUM_LINES = [1, 2, 3], SIJUM_SHORT = { "크리티컬": "크리", "극대화": "극대" };
-const SIJUM_CHOICES = Object.keys(ARMOR_SIJUM).map(n => [n, `시줌 ${SIJUM_SHORT[n] || n}`]);
+// 추가 효과 (시줌): 엑사·테네만 부위마다 3줄 (네블론은 시줌이 없고 그 자리에 옵션 변환 3줄). 수치 단계가 하나뿐인 옵션(모스뎀)은 수치 칸을 숨긴다
+const SIJUM_LINES = [1, 2, 3];
+const SIJUM_CHOICES = Object.keys(ARMOR_SIJUM).map(n => [n, n]);   // 크리티컬 / 극대화 / 모스뎀
 const SIJUM_STEP_MAX = String(Math.max(...Object.values(ARMOR_SIJUM).map(d => d.steps.length)));
 const stepText = v => +(v * 100).toFixed(3) + "%";
 
@@ -134,8 +134,8 @@ function equipTable() {
     `<td class="next"><div class="pick"><select id="gear-next-eq-set" aria-label="바꿔 볼 방어구 세트">${options(sets, [[SAME, "그대로"]])}</select></div></td><td class="lock"></td></tr>`;
   html += `</tbody></table></div>` +
     `<p class="hint">엑사 = 엑사스케일, 테네 = 테네브로스. 지금 낀 방어구의 종류·강화·재련과 세트를 넣고, 바꿔 볼 쪽을 고르면 그 차이를 계산해요. "지금" 종류를 넣은 부위만 계산해요. 세트 효과는 네 부위가 모두 그 세트를 쓸 수 있는 방어구일 때만 켜져요.</p>` +
-    `<p class="hint">종류를 넣은 부위마다 시줌(추가 효과) 3줄을 넣을 수 있어요. 크리·극대 1 / 1.5 / 2%(점감 전 합연), 모스뎀 0.5%(합연)예요. "바꿔 보기"의 그대로는 같은 종류 방어구일 때만 지금 시줌을 그대로 써요 (다른 종류로 바꾸면 골라 주세요).</p>` +
-    `<p class="hint">네블론을 고르면 그 부위의 옵션 변환 3줄과 카트리지를 넣는 칸이 생겨요. 옵션 변환 수치는 합연으로 더하고, "강화당" 옵션은 그 부위 강화 수치를 곱해요. DPS에 안 들어가는 옵션은 "옵변 없음·그 밖"으로 두세요.</p>` +
+    `<p class="hint">엑사·테네 부위는 시줌(추가 효과) 3줄을 넣어요. 크리티컬·극대화 1 / 1.5 / 2%(점감 전 합연), 모스뎀 0.5%(합연)예요. "바꿔 보기"의 그대로는 같은 종류 방어구일 때만 지금 시줌을 그대로 써요 (다른 종류로 바꾸면 골라 주세요).</p>` +
+    `<p class="hint">네블론에는 시줌이 없어요. 네블론을 고르면 시줌 자리에 옵션 변환 3줄과 카트리지를 넣는 칸이 생겨요. 옵션 변환 수치는 합연으로 더하고, "강화당" 옵션은 그 부위 강화 수치를 곱해요. DPS에 안 들어가는 옵션은 "옵변 없음·그 밖"으로 두세요.</p>` +
     `<p class="hint">카트리지는 같은 종류면 가장 높은 레벨 하나만 세요. 스탯창에 보이는 효과(배틀·클래식·뮤테이션)와 오버플로우 최종 데미지를 넣고, 서포트1·2는 서포터만 효과가 있어서 효과는 빼고 글리터의 훈장 개수에만 넣어요. 네블론이 있는 쪽은 글리터의 훈장도 그 카트리지로 계산해요 (곱연 크뎀은 배틀·클래식 개수, 최종 데미지는 하이퍼·서포트 개수).</p>` +
     `<p class="hint">네블론은 부위마다 소켓이 1칸 더 있어요. 네블론 부위 수가 바뀌면 늘어난 칸에 크리 6%·극대 6%·"소켓 교체 기준" 마법석 중 DPS가 가장 높은 것을 끼워서 계산해요 (줄면 손해가 가장 적은 것을 빼요).</p>` +
     `<p class="hint">하의·신발 강화는 버프 세팅의 하의·신발 강화 수치와 같은 칸이에요 (한쪽을 바꾸면 다른 쪽도 바뀌어요). 고정 공격력은 계산하지 않아요. 자동 찾기는 방어구를 바꾸지 않고, "바꿔 보기"의 방어구를 낀 채로 악세를 찾아요.</p>`;
@@ -172,7 +172,7 @@ function readEquip(side) {
   for (const p of EQUIP_PARTS) {
     const type = eqSel("now", `${p}-type`).value ? v(`${p}-type`) : "";
     eq[p] = type ? { type, enh: +v(`${p}-enh`), ref: +v(`${p}-ref`) } : null;
-    if (type) eq[p].sijum = SIJUM_LINES.map(i => sijumLine(side, p, i, type === eqSel("now", `${p}-type`).value)).filter(Boolean);
+    if (type && type !== NEBULON) eq[p].sijum = SIJUM_LINES.map(i => sijumLine(side, p, i, type === eqSel("now", `${p}-type`).value)).filter(Boolean);   // 네블론에는 시줌이 없다
     if (type === NEBULON) { eq[p].opts = OPT_LINES.map(i => rerollLine(side, p, i)).filter(Boolean); eq[p].cart = cartLine(side, p); }
   }
   return EQUIP_PARTS.some(p => eq[p]) || eq.set ? eq : null;
@@ -183,11 +183,11 @@ function syncEquip() {
   for (const p of EQUIP_PARTS) {
     const nowType = eqSel("now", `${p}-type`).value, nx = eqSel("next", `${p}-type`).value;
     const nextType = nowType ? (nx === SAME ? nowType : nx) : "";
-    $(`gear-eq-${p}-optrow`).hidden = !nowType;   // 시줌은 모든 방어구, 옵변·카트리지는 네블론만
-    const neb = nowType === NEBULON || nextType === NEBULON;
-    $(`gear-eq-${p}-optlbl`).innerHTML = neb ? "시줌<br>옵변<br>카트리지" : "시줌";
-    $(`gear-now-eq-${p}-sijum`).hidden = !nowType;
-    $(`gear-next-eq-${p}-sijum`).hidden = !nextType;
+    $(`gear-eq-${p}-optrow`).hidden = !nowType;   // 엑사·테네는 시줌 3줄, 네블론은 옵변 3줄·카트리지 (같은 자리)
+    const nebNow = nowType === NEBULON, nebNext = nextType === NEBULON;
+    $(`gear-eq-${p}-optlbl`).innerHTML = nebNow && nebNext ? "옵변<br>카트리지" : nebNow || nebNext ? "시줌<br>옵변<br>카트리지" : "시줌";
+    $(`gear-now-eq-${p}-sijum`).hidden = !nowType || nebNow;
+    $(`gear-next-eq-${p}-sijum`).hidden = !nextType || nebNext;
     for (const i of SIJUM_LINES) eqSel("next", `${p}-j${i}`).options[0].textContent = nextType === nowType ? "그대로" : "골라 주세요";
     for (const side of ["now", "next"]) for (const i of SIJUM_LINES) {
       const o = eqSel(side, `${p}-j${i}`).value, s = eqSel(side, `${p}-jv${i}`), def = o !== SAME && ARMOR_SIJUM[o];
@@ -389,12 +389,17 @@ export function renderGear({ win, job, resist, setup, town }) {
     return;
   }
   const r = compareGear(lastCtx, readGear("now"), readGear("next"));
-  const changed = JSON.stringify(readGear("now")) !== JSON.stringify(Object.assign(readGear("next"), { avatarSets: nowAvatarSets }));
+  const gearChanged = JSON.stringify(readGear("now")) !== JSON.stringify(Object.assign(readGear("next"), { avatarSets: nowAvatarSets }));
+  // 장비가 그대로여도 켜지는 무악 세트가 달라지면 바뀐 것으로 본다 (바꾼 뒤는 가장 좋은 조합으로 켠다)
+  const onSets = fx => fx.sets.filter(s => s.kind === "avatar" && s.active).map(s => s.name).sort().join("|");
+  const setsChanged = onSets(r.before) !== onSets(r.after);
+  const changed = gearChanged || setsChanged;
   const float = $("gear-float");
   float.hidden = !changed;
   float.innerHTML = `<span>DPS 변화</span><b class="${r.gain > 1e-9 ? "up" : r.gain < -1e-9 ? "down" : ""}">${signed(r.gain)}</b><a href="#gear-results">자세히</a>`;
   let html = `<div class="gear-gain ${r.gain > 1e-9 ? "up" : r.gain < -1e-9 ? "down" : ""}"><span class="v">${changed ? signed(r.gain) : "±0%"}</span><span class="k">DPS 변화 (지금 세팅 대비)</span></div>`;
   if (!changed) html += `<p class="hint">"바꿔 보기"에서 부위를 골라 보세요. 세트 효과가 켜지고 꺼지는 것까지 함께 계산해요.</p>`;
+  else if (!gearChanged) html += `<p class="hint">장비는 그대로예요. 켜 둔 무악 세트를 아래 "바꾼 뒤" 칸처럼 바꾸면 DPS가 이만큼 달라져요.</p>`;
 
   // 소켓 교체 (크리·극대 소켓 기준으로 계산에 넣은 교체)
   const swaps = r.swaps || [];
