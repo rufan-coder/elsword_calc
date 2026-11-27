@@ -66,6 +66,7 @@ export function readInputs() {
   if (hasAtkPct(win)) win.atk_pct = statAtkPct(win.A, win.A_max, win.W);
   if (win.aspd >= 1) win.aspd -= 1;   // 동작 속도를 121.4처럼 100 기준으로 넣었으면 21.4%로 본다 (스탯창 상한이 30%라 헷갈릴 일이 없다)
 
+  $("aspd_party_v").disabled = $("aspd_party").value !== "1";   // 파티 기준일 때만 쓴다
   $("acc_battle").disabled = !(BUFF_ITEMS.ear[$("acc_ear").value] || {}).cd_mult_by_battle;   // 글리터의 훈장일 때만 쓴다
   const { setup, detail } = buildSetup({
     town: $("town").value,
@@ -73,7 +74,7 @@ export function readInputs() {
     pantsEnhance: num("pants") || 0, shoesEnhance: num("shoes") || 0,
     stoneCdr: pctOrZero("enc_cdr"), stoneDur: pctOrZero("enc_dur"),
     faceTop: $("acc_face_top").value, ear: $("acc_ear").value, battle: num("acc_battle") || 0,
-    party: $("aspd_party").value === "1", atma: $("acc_atma").value,
+    party: $("aspd_party").value === "1", partyAspd: pctOrZero("aspd_party_v"), atma: $("acc_atma").value,
     cls, aspdSkills: readAspdSkills(),
   });
   setup.debuff = DUNGEONS[dungeon].debuff;   // 적응력 계산에 쓴다

@@ -35,7 +35,8 @@ const ASPD_NOTE = "×는 곱연산(서로 곱해서 ×1.4까지), +는 점감 �
 const ASPD_KIND = { mult: "곱연", dim: "점감 합연", flat: "무점감" };
 /** 전직 동속 패시브·버프 한 줄의 값 글자: ×10% / +10% / 무점감 +8% */
 const aspdSkillValue = s => (s.kind === "mult" ? "×" : s.kind === "flat" ? "무점감 +" : "+") + trimPct(s.v);
-const aspdSkillTip = s => [`${ASPD_KIND[s.kind]}${s.guess ? " (정확히 모름, 곱연으로 계산)" : ""}`, s.dur, s.note].filter(Boolean).join(" · ");
+/** 설명(툴팁). 사실상 상시인 것은 붙이지 않는다 */
+const aspdSkillTip = s => s.always ? "" : [`${ASPD_KIND[s.kind]}${s.guess ? " (정확히 모름, 곱연으로 계산)" : ""}`, s.dur, s.note].filter(Boolean).join(" · ");
 /** parts: [이름, 값 글자, 툴팁] 목록. 값이 0인 항목은 미리 빼고 넘긴다 */
 function partsHtml(parts, note = PARTS_NOTE) {
   const items = parts.filter(Boolean).map(([label, value, tip]) => `<span${tip ? ` class="src" title="${esc(tip)}"` : ""}>${label} ${value}</span>`);
@@ -76,7 +77,7 @@ export function renderSummary(ctx) {
   $("setup-info").textContent = `적용 값 · 마을 버프 ${townParts.join(" ") || "없음"} · 하의 크확 ×${trimPct(pants)} · 신발 극대 ×${trimPct(shoes)}` + (yellow ? " · 황색 크극 ×8%" : "") +
     ` · 격려 가동률 ${(enc.uptime * 100).toFixed(1)}% (쿨 ${Math.round(enc.cool)}초, 지속 ${Math.round(enc.dur)}초)` +
     (items || []).filter(x => x.v).map(x => ` · ${x.name} 크뎀 곱연 ×${trimPct(x.v)}`).join("") +   // 최종 데미지만 있는 아이템은 적지 않는다
-    ` · 동작 속도 ${(setup.aspd_mults || []).some(x => x.name === "파티") ? "파티" : "솔로"} 기준`;
+    ` · 동작 속도 ${setup.aspd_party === false ? "솔로" : "파티"} 기준`;
 
   // 실전 수치. 상한을 넘은 스탯은 넘은 만큼을 빨간 글씨로 붙인다. 크뎀·보뎀은 아래에 작은 글씨로 어디서 온 값인지 적는다
   // 타일: [이름, 값, 빨간 글씨 등 한 줄, 추가 class, 툴팁, 출처 목록, 출처 설명, 이름 오른쪽에 붙일 것]
@@ -111,10 +112,10 @@ export function renderSummary(ctx) {
   // 동작 속도: DPS에는 안 넣는다. 평소/격려 중 실전 값, 격려 중 천장(70%)까지 필요한 스탯창 값
   if (has(win, "aspd")) {
     const skills = setup.aspd_class || [], on = k => skills.filter(s => s.on && s.kind === k);
-    const mults = (setup.aspd_mults || []).concat(on("mult")), party = mults.some(x => x.name === "파티");
+    const mults = (setup.aspd_mults || []).concat(on("mult")), party = setup.aspd_party !== false;
     const a = aspdCalc(win.aspd, mults.map(x => x.v), ASPD.encourage, on("dim").map(s => s.v), on("flat").map(s => s.v));
     const seg = `<span class="seg" role="group" aria-label="동작 속도 기준">` +
-      [["1", "파티", "파티 동속 9% 포함"], ["0", "솔로", "파티 동속 없이"]].map(([v, label, tip]) =>
+      [["1", "파티", "녹힐 버프와 파티 동작 속도 포함"], ["0", "솔로", "녹힐 버프·파티 동작 속도 없이"]].map(([v, label, tip]) =>
         `<button type="button" data-aspd-party="${v}" aria-pressed="${(v === "1") === party}" title="${tip}">${label}</button>`).join("") + `</span>`;
     const line = a.over > 5e-5 ? overText(a.over, "aspd", "스탯창 ") + " (격려 중 천장)"
       : a.need != null ? `격려 중 천장까지 스탯창 ${trimPct(a.need)}` : "격려 중에도 천장(70%)에 못 닿아요";
@@ -122,11 +123,12 @@ export function renderSummary(ctx) {
     const opts = skills.filter(s => s.toggle);
     const toggles = opts.length ? `<div class="aspd-skills" role="group" aria-label="켜고 끌 수 있는 동속 패시브·버프">` + opts.map(s =>
       `<button type="button" data-aspd-skill="${esc(s.key)}" aria-pressed="${s.on}" title="${esc(aspdSkillTip(s))}">${esc(s.name)} ${aspdSkillValue(s)}</button>`).join("") + `</div>` : "";
-    const statText = on("dim").length ? `${trimPct(Math.min(win.aspd, ASPD.window_cap))} → ${trimPct(a.stat)}` : trimPct(Math.min(win.aspd, ASPD.window_cap));
+    // 점감 합연 패시브는 따로 적지 않고 스탯창 값에 마우스를 올리면 보이게 한다
+    const dims = on("dim"), statText = dims.length ? `${trimPct(Math.min(win.aspd, ASPD.window_cap))} → ${trimPct(a.stat)}` : trimPct(Math.min(win.aspd, ASPD.window_cap));
+    const statTip = dims.length ? `점감 합연 ${dims.map(s => `${s.name} +${trimPct(s.v)}`).join(", ")}를 더하고 다시 점감을 건 값이에요 (30%까지).` : "";
     tiles.push(["동작 속도 (평소/격려 중)", `${fmt(a.normal, 1)}/${fmt(a.enc, 1)}`, line, "wide",
       "DPS에는 넣지 않아요. 전직 패시브·버프는 정리해 둔 표 기준이고, 아래 버튼은 켜고 끌 수 있는 것이에요.",
-      [["스탯창", statText, on("dim").length ? "점감 합연 패시브를 더해 다시 점감을 건 값 (30%까지)" : ""],
-        ...on("dim").map(s => [s.name, aspdSkillValue(s), aspdSkillTip(s)]),
+      [["스탯창", statText, statTip],
         ...(setup.aspd_mults || []).map(x => [x.name, times(x.v)]),
         ...on("mult").map(s => [s.name, times(s.v), aspdSkillTip(s)]),
         ["격려", times(ASPD.encourage) + " (격려 중)"],

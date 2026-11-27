@@ -35,12 +35,17 @@ test("스탯창 동속이 천장에 필요한 값을 넘으면 그만큼을 초�
   assert.equal(aspdCalc(0.20, [0.15, 0.03, 0.09]).over, 0);
 });
 
-test("버프 세팅: 칭호는 항상, 헤일로는 얼상이 헤일로일 때, 파티 동속 9%는 파티 기준일 때만", () => {
+test("버프 세팅: 칭호는 항상, 헤일로는 얼상이 헤일로일 때, 녹힐 버프 10%와 파티 동작 속도는 파티 기준일 때만", () => {
   assert.deepEqual(aspdBuffs("", false).map(x => x.v), [0.15]);
-  assert.deepEqual(aspdBuffs("마에스트로 헤일로", true).map(x => x.v), [0.15, 0.03, 0.09]);
-  assert.deepEqual(aspdBuffs("침식된 가시뿔", true).map(x => x.v), [0.15, 0.09]);   // 가시뿔 3%는 합연이라 스탯창에 들어 있다
+  assert.deepEqual(aspdBuffs("마에스트로 헤일로", true).map(x => x.v), [0.15, 0.03, 0.10, 0.09]);   // 파티 동작 속도를 안 주면 9%
+  assert.deepEqual(aspdBuffs("침식된 가시뿔", true).map(x => x.v), [0.15, 0.10, 0.09]);   // 가시뿔 3%는 합연이라 스탯창에 들어 있다
+  assert.deepEqual(aspdBuffs("", true, 0.12).map(x => [x.name, x.v]), [["각성 칭호", 0.15], ["녹힐 버프", 0.10], ["파티 동속", 0.12]]);
+  assert.deepEqual(aspdBuffs("", true, 0).map(x => x.v), [0.15, 0.10]);           // 파티 동작 속도 칸을 비우면 녹힐만
+  assert.deepEqual(aspdBuffs("", true, 0.12, true).map(x => x.v), [0.15, 0.12]);  // 자기 녹힐 버프가 있으면 파티 녹힐은 안 넣는다
   const base = { town: "온천 버프", pantsEnhance: 11, shoesEnhance: 11, yellow: true, stoneCdr: 0.3, stoneDur: 0 };
   assert.deepEqual(buildSetup({ ...base, party: false }).setup.aspd_mults.map(x => x.name), ["각성 칭호"]);
+  assert.deepEqual(buildSetup({ ...base, partyAspd: 0.05 }).setup.aspd_mults.map(x => x.v), [0.15, 0.10, 0.05]);
+  assert.deepEqual(buildSetup({ ...base, cls: "디우스 아에르" }).setup.aspd_mults.map(x => x.name), ["각성 칭호", "파티 동속"]);   // 페더 크레스트가 녹힐 버프
   assert.deepEqual(buildSetup(base).setup.cd_base_mults, buildSetup({ ...base, party: false }).setup.cd_base_mults);   // 크뎀 파티 버프는 그대로
 });
 
@@ -85,4 +90,10 @@ test("전직 동속 데이터: 전직 이름이 맞고, 선택 항목의 처음 
   assert.equal(classAspd("룬 마스터", o)[0].on, false);
   assert.ok(ASPD_SKILLS.filter(s => s.guess).every(s => s.kind === "mult"));
   assert.deepEqual(buildSetup({ town: "온천 버프", cls: "코멧 크루세이더" }).setup.aspd_class.map(s => [s.kind, s.v]), [["mult", 0.08], ["flat", 0.08]]);
+});
+
+test("비고에 \"사실상 상시\"가 있는 패시브는 always 로 표시한다 (화면에 설명을 안 붙인다)", () => {
+  assert.equal(classAspd("트윈즈 피카로")[0].always, true);
+  assert.equal(classAspd("코멧 크루세이더").some(s => s.always), false);
+  assert.equal(ASPD_SKILLS.filter(s => /사실상 상시/.test(s.note || "")).length, 14);
 });

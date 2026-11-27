@@ -21,7 +21,8 @@ export function aspdRaw(shown) {
 }
 
 /**
- * 고른 전직의 동속 패시브·버프 [{ key, name, v, kind, dur, note, toggle, on, guess }].
+ * 고른 전직의 동속 패시브·버프 [{ key, name, v, kind, dur, note, toggle, on, guess, always }].
+ * always: 비고에 "사실상 상시"라고 적힌 것 (화면에 설명을 붙이지 않는다)
  * overrides: { "전직|스킬 이름": true/false } 켜고 끈 것 (없으면 처음 값)
  */
 export function classAspd(cls, overrides = {}) {
@@ -29,21 +30,28 @@ export function classAspd(cls, overrides = {}) {
     const key = `${cls}|${s.name}`;
     const first = !s.toggle || (Array.isArray(s.defaultOn) ? s.defaultOn.includes(cls) : !!s.defaultOn);
     const on = s.toggle && overrides && key in overrides ? !!overrides[key] : first;
-    return { key, name: s.name, v: s.v, kind: s.kind, dur: s.dur, note: s.note || "", toggle: !!s.toggle, on, guess: !!s.guess };
+    return { key, name: s.name, v: s.v, kind: s.kind, dur: s.dur, note: s.note || "", toggle: !!s.toggle, on, guess: !!s.guess, always: /사실상 상시/.test(s.note || "") };
   });
 }
 
 /**
  * 곱연산 동속 버프 목록 [{ name, v }] (격려 제외).
  * faceTop: 얼굴 상단 일반 악세 이름, party: 파티 기준이면 true
+ * partyV : 파티 동작 속도 (없으면 ASPD.party), ownHeal: 자기 전직 스킬에 녹힐 버프가 있으면 true (파티 녹힐을 또 넣지 않는다)
  */
-export function aspdBuffs(faceTop, party) {
+export function aspdBuffs(faceTop, party, partyV = ASPD.party, ownHeal = false) {
   const out = [{ name: "각성 칭호", v: ASPD.title }];
   const halo = faceTop && (BUFF_ITEMS.face_top[faceTop] || {}).aspd_mult;
   if (halo) out.push({ name: faceTop, v: halo });
-  if (party) out.push({ name: "파티", v: ASPD.party });
+  if (party) {
+    if (!ownHeal) out.push({ name: "녹힐 버프", v: ASPD.heal });
+    if (partyV) out.push({ name: "파티 동속", v: partyV });
+  }
   return out;
 }
+
+/** 전직 스킬 중 켜져 있는 녹힐 버프가 있는지 (비고에 "녹힐 버프") */
+export const hasOwnHeal = skills => skills.some(s => s.on && s.kind === "mult" && /녹힐/.test(s.note));
 
 /**
  * 실전 동작 속도.
