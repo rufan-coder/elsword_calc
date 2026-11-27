@@ -91,24 +91,25 @@ export function renderSummary(ctx) {
   // 타일: [이름, 값, 빨간 글씨 등 한 줄, 추가 class, 툴팁, 출처 목록, 출처 설명, 이름 오른쪽에 붙일 것]
   const over = capOver(win, setup, job, resist);
   const tiles = [];
+  // 순서: 공격력% / 크리 / 극대 / 크뎀 / 보뎀 / 적응력 (/ 양극화) / 동속 / 초목 효율
+  if (has(win, "atk_pct")) {
+    const hp = job.atk_s && has(base, "atk_pct");   // 메타모르피: HP 연동 공격력이 스탯형 공격력에 더해진다
+    tiles.push(["공격력 % (스텟)", fmt(hp ? base.atk_pct : win.atk_pct, 2), win.atk_pct < 0 ? "값을 확인하세요" : ""]);
+  }
   if (hasCrit(base)) {
     const crOver = [over.crit && overText(over.crit, "crit"), over.crit_sat && overText(over.crit_sat, "crit_sat", "점감 ")].filter(Boolean).join(" · ");
     tiles.push(["평균 크리티컬 확률", fmt(critFinal(base), 1), crOver]);
-    tiles.push(["크리티컬 데미지", fmt(base.crit_dmg, 1), "", "wide", "", critDmgParts(ctx)]);
   }
   if (hasMaxi(base)) {
     const mxOver = [over.maxi && overText(over.maxi, "maxi"), over.maxi_sat && overText(over.maxi_sat, "maxi_sat", "점감 ")].filter(Boolean).join(" · ");
     tiles.push(["최종 극대화", fmt(maxiFinal(base), 1), mxOver]);
   }
+  if (hasCrit(base)) tiles.push(["크리티컬 데미지", fmt(base.crit_dmg, 1), "", "wide", "", critDmgParts(ctx)]);
   if (has(base, "boss")) {
     const p = CLASS[cls] || job;
     tiles.push(["보스 데미지", fmt(base.boss, 1), "", "wide", "", [
       ["스탯창", trimPct(win.boss)], setup.guild_boss ? ["길드", plus(setup.guild_boss)] : null, setup.town_boss ? ["마을", plus(setup.town_boss)] : null,
       p.boss ? ["패시브", plus(p.boss), (PASSIVE_SOURCES[cls] || {}).boss] : null]]);
-  }
-  if (has(win, "atk_pct")) {
-    const hp = job.atk_s && has(base, "atk_pct");   // 메타모르피: HP 연동 공격력이 스탯형 공격력에 더해진다
-    tiles.push(["공격력 % (스텟)", fmt(hp ? base.atk_pct : win.atk_pct, 2), win.atk_pct < 0 ? "값을 확인하세요" : ""]);
   }
   // 적응력: 적응력 + 마을 버프(상한 60%) + 초적응력
   if (has(base, "adapt")) {
