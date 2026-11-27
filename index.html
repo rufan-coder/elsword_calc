@@ -109,7 +109,9 @@
           <div class="field"><label for="cdr_cho">초월한 스킬 재사용 시간 감소</label><div class="unit"><input type="number" id="cdr_cho" step="0.01" inputmode="decimal"><span>%</span></div></div>
           <div class="field"><label for="aspd">동작 속도</label><div class="unit"><input type="number" id="aspd" step="0.01" inputmode="decimal"><span>%</span></div></div>
         </div>
-        <p class="hint" style="margin-top:10px">적응력은 던전의 마계 디버프와 비교해 계산해요 (적응력은 60%까지, 초적응력은 그 위에 더해져요). 재사용 시간 감소는 35%까지만 적용되고, DPS 계산에는 넣지 않아요 (악세 세팅에서 목표 쿨감을 지키는 데만 써요). 동작 속도도 DPS에는 넣지 않고, 버프까지 반영한 실전 동작 속도만 보여 줘요 (21.4와 121.4 둘 다 돼요).</p>
+        <p class="hint" style="margin-top:10px">적응력은 던전의 마계 디버프와 비교해 계산해요 (적응력은 60%까지, 초적응력은 그 위에 더해져요).</p>
+        <p class="hint" style="margin-top:10px">재사용 시간 감소는 35%까지만 적용되고, DPS 계산에는 넣지 않아요 (악세 세팅에서 목표 쿨감을 지키는 데만 써요). </p>
+        <p class="hint" style="margin-top:10px">동작 속도도 DPS에는 넣지 않고, 버프까지 반영한 실전 동작 속도만 보여 줘요.</p>
         <p class="hint" style="margin-top:6px">초월 점유율은 게임에서 보이는 딜 비중 기준이에요. 나머지는 강렬 스킬로 계산해요. 비교할 옵션과 상관없는 칸은 비워둬도 돼요.</p>
       </section>
 
@@ -129,7 +131,13 @@
             <div class="field"><label for="acc_battle">배틀·클래식 카트리지</label><select id="acc_battle"><option value="0">0개</option><option value="1">1개</option><option value="2">2개 이상</option></select></div>
             <div class="field"><label for="acc_atma">아트마 세트 (유니크 기준)</label><select id="acc_atma"><option value="">해당사항 없음</option><option value="유수">유수의 아트마</option><option value="초목">초목의 아트마</option></select></div>
           </div>
-          <p class="hint" style="margin-top:6px">스탯창에 안 보이는 크뎀 곱연산만 넣어요: 마에스트로 헤일로 2%(동작 속도 곱연산 3%도 있어요), 글리터의 훈장은 네블론 방어구에 단 배틀·클래식 카트리지 1개 0.5% · 2개 이상 1% (같은 카트리지는 1개로 세요). 최종 데미지는 옵션 비교에 영향이 없어서 빼요. 침식된 가시뿔의 동작 속도 3%는 합연이라 스탯창에 이미 들어 있어요. 얼굴 상단·귀걸이는 악세 세팅의 "지금" 일반 악세와 같은 칸이라 한쪽을 바꾸면 다른 쪽도 바뀌고 (하의·신발 강화 수치도 악세 세팅의 "지금" 방어구 강화와 같아요), 카트리지 개수는 악세 세팅에서도 그대로 써요. 초목의 아트마는 크뎀 곱연 30%가 붙어요 (크리 −6%는 스탯창에 이미 들어 있어요). 유수의 아트마는 최종 데미지라 계산 결과는 그대로예요. 아트마는 아직 악세 세팅과 연동되지 않아요.</p>
+          <p class="hint" style="margin-top:6px">스탯창에 안 보이는 크뎀 곱연산만 넣어요: 마에스트로 헤일로 2%(동작 속도 곱연산 3%도 있어요). 침식된 가시뿔의 동작 속도 3%는 합연이라 스탯창에 이미 들어 있어요.</p>
+          <p class="hint" style="margin-top:6px">글리터의 훈장은 네블론 방어구에 단 배틀·클래식 카트리지 1개 0.5% · 2개 이상 1% (같은 카트리지는 1개로 세요).</p>
+          <p class="hint" style="margin-top:6px">최종 데미지는 옵션 비교에 영향이 없어서 빼요. </p>
+          <p class="hint" style="margin-top:6px">얼굴 상단·귀걸이는 악세 세팅의 "지금" 일반 악세와 같은 칸이라 한쪽을 바꾸면 다른 쪽도 바뀌고 (하의·신발 강화 수치도 악세 세팅의 "지금" 방어구 강화와 같아요).</p>
+          <p class="hint" style="margin-top:6px">카트리지 개수는 악세 세팅에서도 그대로 써요. </p>
+          <p class="hint" style="margin-top:6px">초목의 아트마는 크뎀 곱연 30%가 붙어요 (크리 −6%는 스탯창에 이미 들어 있어요).</p>
+          <p class="hint" style="margin-top:6px">유수의 아트마는 최종 데미지라 계산 결과는 그대로예요. 아트마는 아직 악세 세팅과 연동되지 않아요.</p>
           <div class="sub" style="margin-top:14px">비전의 원석 (격려)</div>
           <div class="grid">
             <div class="field"><label for="enc_cdr">격려 재사용 시간 감소 합계</label><div class="unit"><input type="number" id="enc_cdr" step="1" min="0" inputmode="decimal"><span>%</span></div></div>
