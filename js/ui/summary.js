@@ -136,9 +136,10 @@ export function renderSummary(ctx) {
     const toggles = opts.length ? `<div class="aspd-skills" role="group" aria-label="켜고 끌 수 있는 동속 패시브·버프">` + opts.map(s =>
       `<button type="button" data-aspd-skill="${esc(s.key)}" aria-pressed="${s.on}" title="${esc(aspdSkillTip(s))}">${esc(s.name)} ${aspdSkillValue(s)}</button>`).join("") + `</div>` : "";
     // 합연 패시브(점감·무점감)는 따로 적지 않고 스탯창 값에 마우스를 올리면 보이게 한다. 곱연은 뒤에 따로 적는다
-    const dims = on("dim"), statText = dims.length ? `${trimPct(Math.min(win.aspd, ASPD.window_cap))} → ${trimPct(a.stat)}` : trimPct(Math.min(win.aspd, ASPD.window_cap));
+    // 동속 값은 게임처럼 100 기준, 소수 둘째 자리까지 (121.40%, 170.00%)
+    const shown = fmt(1 + Math.min(win.aspd, ASPD.window_cap)), dims = on("dim"), statText = dims.length ? `${shown} → ${fmt(1 + a.stat)}` : shown;
     const statTip = [...on("dim"), ...on("flat")].map(s => `${s.name} ${ASPD_KIND[s.kind]} +${trimPct(s.v)}`).join("\n");
-    tiles.push(["동작 속도 (평소/격려 중)", `${fmt(a.normal, 1)}/${fmt(a.enc, 1)}`, line, "wide",
+    tiles.push(["동작 속도 (평소/격려 중)", `${fmt(1 + a.normal)}/${fmt(1 + a.enc)}`, line, "wide",
       "DPS에는 넣지 않아요. 전직 패시브·버프는 정리해 둔 표 기준이고, 아래 버튼은 켜고 끌 수 있는 것이에요.",
       [["스탯창", statText, statTip],
         ...(setup.aspd_mults || []).map(x => [x.name, times(x.v)]),
