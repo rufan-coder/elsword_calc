@@ -25,18 +25,19 @@
 //   단 그쪽 장착에 네블론 방어구가 있으면 그 카트리지로 센다 (곱연 크뎀은 배틀·클래식, 최종 데미지는 하이퍼·서포트 개수).
 //   카트리지는 같은 종류면 가장 높은 레벨 하나만 센다. 서플라이·서포트 1·2는 서포터만 효과가 있어서 효과는 빼고 개수에만 넣는다.
 //   방어구의 하의·신발 강화(크리·극대 곱연산)는 버프 세팅의 하의·신발 강화 수치를 바뀐 강화 차이만큼 옮겨서 센다.
-//   방어구 고정 공격력(재련)은 다른 고정 공격력처럼 계산하지 않는다.
+//   고정 공격력(악세·아바타의 물공·마공, 방어구 재련)은 기본 공격력에 더한다. 기본 공격력은 스탯창 공격력을 (1 + 스탯형)·(1 + 패시브형 26.5%)로
+//   나눠 되돌린다 (시트와 같음). 무기 공격력 칸이 비어 있어 스탯형을 모르면 고정 공격력은 계산하지 않는다.
 //   네블론 방어구는 부위마다 소켓이 1칸 더 있다. 네블론 부위 수가 바뀌면 늘어난 칸에 크리 6%·극대 6%·ctx.slotStone 중
 //   DPS가 가장 높은 것을 끼운다 (줄면 빼서 손해가 가장 적은 것을 뺀다). 고르는 기준은 지금 스탯창에 방어구 변화만 반영한 상태.
 //   크리·극대 소켓 기준을 꺼도 센다.
 
 import { ACCESSORIES, NEW_ACCESSORIES, ARMOR_AVATARS, WEAPON_AVATARS, OUTFITS, WEAPONS, SETS, ATMA, AVATAR_SET_LIMIT, SPIRIT_STONES } from "../data/accessories.js";
 import { critFromStat, statFromCrit, maxiFromStat, statFromMaxi } from "./diminish.js";
-import { resolve, dpsIndex, has } from "./stats.js";
+import { resolve, dpsIndex, has, baseAttack } from "./stats.js";
 import { setupWithTown, buffItems } from "./buffs.js";
 import { BUFF_ITEMS } from "../data/buffs.js";
 import { CRIT_MAXI_PER_SLOT } from "../data/stones.js";
-import { ARMOR_TYPES, ARMOR_PART_ENHANCE, ARMOR_SETS, ARMOR_REROLL, ARMOR_SIJUM, CARTRIDGES } from "../data/equipment.js";
+import { ARMOR_TYPES, ARMOR_PART_ENHANCE, ARMOR_SETS, ARMOR_REROLL, ARMOR_SIJUM, CARTRIDGES, ARMOR_BASE_ATTACK, ENHANCE_MULT } from "../data/equipment.js";
 
 const ACC_BY_NAME = new Map([...ACCESSORIES, ...NEW_ACCESSORIES].map(a => [a.name, a]));
 const WAVATAR_BY_NAME = new Map(WEAPON_AVATARS.map(w => [w.name, w]));
@@ -102,10 +103,11 @@ export function equipCartridges(equip) {
 
 /**
  * 방어구 효과를 더한다. 부위마다 강화·재련 효과, 부위 강화 효과(상의 최종뎀, 장갑 모스뎀, 하의·신발은 partMult 로 따로), 4세트 효과.
- * acc 에 equipSet({ name, active }), nebulon(네블론 부위 수), fixedAtk(고정 공격력 합, 계산 안 함), partMult({ crit, maxi }) 를 남긴다
+ * acc 에 equipSet({ name, active }), nebulon(네블론 부위 수), partMult({ crit, maxi }) 를 남기고, 고정 공격력은 fixedAtk 에 더한다:
+ *   재련 고정 공격력, 그리고 tier(전직 공격력 티어)를 주면 부위 기본 공격력 x 강화 배율도 (상의 강화를 바꾸면 고정 공격력이 바뀐다)
  */
-function addEquip(acc, equip, atkType, cart = equipCartridges(equip)) {
-  acc.equipSet = null; acc.nebulon = 0; acc.fixedAtk = 0; acc.partMult = {}; acc.cartridges = cart;
+function addEquip(acc, equip, atkType, cart = equipCartridges(equip), tier = null) {
+  acc.equipSet = null; acc.nebulon = 0; acc.fixedAtk = acc.fixedAtk || 0; acc.partMult = {}; acc.cartridges = cart;
   if (!equip) return;
   // 카트리지 (같은 종류는 가장 높은 레벨 하나). 수치를 모르는 것은 효과 없이, 서포터 전용은 효과를 뺀다
   for (const [name, lv] of cart.best) {
@@ -122,7 +124,7 @@ function addEquip(acc, equip, atkType, cart = equipCartridges(equip)) {
     const enh = t.enhance[e.enh] || {}, ref = t.reforge[e.ref] || {};
     addStats(acc, equipStats(enh), atkType);
     addStats(acc, equipStats(ref), atkType);
-    acc.fixedAtk += ref.fixed_atk || 0;
+    acc.fixedAtk += (ref.fixed_atk || 0) + (tier && ARMOR_BASE_ATTACK[tier] ? (ARMOR_BASE_ATTACK[tier][part] || 0) * (ENHANCE_MULT[e.enh] || 1) : 0);
     for (const o of t.nebulon ? [] : e.sijum || []) {   // 추가 효과 (시줌): 엑사·테네만 (네블론은 시줌 대신 옵션 변환). 크리·극대는 점감 전 합연, 모스뎀은 합연
       const def = ARMOR_SIJUM[o.name], v = def && def.steps[o.step - 1];
       if (v) addStats(acc, partStat(def.stat, v), atkType);
@@ -177,7 +179,7 @@ function atmaGrade(item, slot, gear) {
 
 /**
  * 능력치 묶음을 계산에 쓰기 좋은 모양으로 한 번만 바꿔 둔다 (자동 찾기에서 수만 번 부르므로).
- * [종류, 키, 값] 목록. 종류: 0 스탯창에 보이는 효과, 1 곱연 크뎀, 2 최종 데미지, 3 계산하지 않는 효과
+ * [종류, 키, 값] 목록. 종류: 0 스탯창에 보이는 효과, 1 곱연 크뎀, 2 최종 데미지, 3 계산하지 않는 효과, 4 고정 공격력 (주 공격 타입 것만)
  */
 const PREPARED = { 물리: new WeakMap(), 마법: new WeakMap() };
 function prepared(stats, atkType) {
@@ -189,7 +191,7 @@ function prepared(stats, atkType) {
     if (k === "cd_mult") list.push([1, k, v]);
     else if (k === "final") list.push([2, k, v]);
     else if (k === "patk_pct" || k === "matk_pct") { if ((k === "patk_pct") === (atkType !== "마법")) list.push([0, "atk_pct", v]); }
-    else if (k === "patk" || k === "matk") continue;   // 고정 공격력은 무기 공격력에 비해 아주 작아서 뺀다
+    else if (k === "patk" || k === "matk") { if ((k === "patk") === (atkType !== "마법")) list.push([4, "fixed_atk", v]); }   // 고정 공격력: 기본 공격력에 더한다
     else if (IGNORED[k]) list.push([3, k, v]);
     else list.push([0, k, v]);
   }
@@ -228,6 +230,7 @@ function addStats(acc, stats, atkType) {
     if (kind === 0) acc.visible[k] = (acc.visible[k] || 0) + v;
     else if (kind === 1) acc.cdMults.push(v);
     else if (kind === 2) acc.finals.push(v);
+    else if (kind === 4) acc.fixedAtk = (acc.fixedAtk || 0) + v;
     else acc.ignored[k] = (acc.ignored[k] || 0) + v;
   }
 }
@@ -277,9 +280,10 @@ export function atmaSet(gear) {
  * avatarChoice: 무악 세트가 4개 이상일 때 켤 세트 이름 목록 (없으면 개수가 많은 순)
  * ignore      : 세트 효과를 세지 않을 세트 이름 Set (자동 찾기가 오래된 세트를 맞추지 않게 할 때)
  * battle      : 버프 세팅의 배틀·클래식 카트리지 개수 (글리터의 훈장 곱연 크뎀. null 이면 데이터 값)
+ * tier        : 전직 공격력 티어 (방어구 부위 기본 공격력에 쓴다. 없으면 방어구 고정 공격력은 재련 몫만)
  */
-export function gearEffects(gear, atkType, avatarChoice, ignore, battle = null) {
-  const acc = { visible: {}, ignored: {}, cdMults: [], finals: [], unknown: [] };
+export function gearEffects(gear, atkType, avatarChoice, ignore, battle = null, tier = null) {
+  const acc = { visible: {}, ignored: {}, cdMults: [], finals: [], unknown: [], fixedAtk: 0 };
   const cart = equipCartridges(gear.equip), b = cart.has ? cart.counts.battle : battle, glitter = cart.has ? cart.counts : null;   // 네블론이 있으면 그 카트리지로
   const items = [];
   for (const layer of ["avatar", "normal"]) for (const name of Object.values(gear[layer])) { const a = ACC_BY_NAME.get(name); if (a) items.push(a); }
@@ -291,7 +295,7 @@ export function gearEffects(gear, atkType, avatarChoice, ignore, battle = null) 
     else if (set) acc.unknown.push(`${set} (레어 아바타)`);
   }
   if (gear.spirit != null && SPIRIT_FX[gear.spirit]) addStats(acc, SPIRIT_FX[gear.spirit], atkType);
-  addEquip(acc, gear.equip, atkType, cart);
+  addEquip(acc, gear.equip, atkType, cart, tier);
 
   // 세트 효과. 무악 세트는 AVATAR_SET_LIMIT 개까지만
   const all = setStages(countSets(gear), ignore);
@@ -341,9 +345,11 @@ const minus = (a, b) => {
 };
 const prodOf = xs => xs.reduce((a, x) => a * (1 + x), 1);
 
-function dps(win, job, resist, setup, fx) {
+/** fixedRatio: 지금 장착 대비 고정 공격력 변화 ÷ 기본 공격력 (0 이면 고정 공격력 변화 없음) */
+function dps(win, job, resist, setup, fx, fixedRatio = 0) {
   // 버프 세팅의 얼상·귀걸이 크뎀 곱연산(item_cd_mults)은 빼고 장비 쪽 효과(fx.cdMults)로 센다 (같은 아이템을 두 번 세지 않게)
   const s = resolve(win, job, resist, Object.assign({}, setup, { cd_base_mults: setup.cd_base_mults.concat(fx.cdMults), item_cd_mults: [] }));
+  if (fixedRatio) s.fixed_atk_ratio = fixedRatio;
   return dpsIndex(s) * prodOf(fx.finals) * (1 + (setup.town_final || 0));   // 마을 버프의 최종 데미지 (있는 버프만)
 }
 
@@ -426,8 +432,11 @@ export function gearScorer(ctx, beforeGear, { ignoreSets = null } = {}) {
   const { win, job, resist, setup } = ctx, atkType = job ? job.type : "물리";
   const setupFor = g => g && g.town && g.town !== ctx.town ? setupWithTown(setup, g.town) : setup;
   const battle = setup.glitter_battle ?? null;
-  const before = gearEffects(beforeGear, atkType, beforeGear.avatarSets, ignoreSets, battle);
+  const tier = job ? job.tier : null;
+  const before = gearEffects(beforeGear, atkType, beforeGear.avatarSets, ignoreSets, battle, tier);
   const baseDps = dps(win, job, resist, setup, before);
+  // 고정 공격력: 지금 장착 대비 변화를 스탯창에서 되돌린 기본 공격력으로 나눈 값 (무기 공격력이 없으면 세지 않는다)
+  const baseAtk = baseAttack(win), fixedOf = fx => baseAtk ? ((fx.fixedAtk || 0) - (before.fixedAtk || 0)) / baseAtk : 0;
   // 크리·극대 소켓 기준: 대신 끼울 마법석은 지금 상태에서 한 칸 끼웠을 때 가장 좋은 것, 뺄 마법석은 한 칸 뺐을 때 손해가 가장 적은 것 하나씩
   // (칸마다 다시 고르면 자동 찾기가 몇 배 느려진다. 순서가 바뀌는 경우는 드물다)
   let sockets = null;
@@ -458,7 +467,7 @@ export function gearScorer(ctx, beforeGear, { ignoreSets = null } = {}) {
   const settle = (fx, st0, g, exact) => {
     const st = withPartEnhance(st0, fx, before);   // 방어구 하의·신발 강화가 바뀌었으면 크리·극대 곱연산도
     const delta = minus(fx.visible, before.visible), shifted = shiftWindow(win, delta);
-    const dpsOf = w => dps(w, job, resist, st, fx);
+    const dpsOf = w => dps(w, job, resist, st, fx, fixedOf(fx));
     let real = shifted.win, swaps = [];
     if (sockets && !exact) ({ real, swaps } = settleSockets(real, delta, sockets));
     const dn = (fx.nebulon || 0) - (before.nebulon || 0);
@@ -471,14 +480,14 @@ export function gearScorer(ctx, beforeGear, { ignoreSets = null } = {}) {
   };
   const valueOf = (fx, g) => settle(fx, setupFor(g), g).value / baseDps;
   const afterFor = (g, choice, exact) => {
-    const fx = gearEffects(g, atkType, choice, ignoreSets, battle), r = settle(fx, setupFor(g), g, exact);
+    const fx = gearEffects(g, atkType, choice, ignoreSets, battle, tier), r = settle(fx, setupFor(g), g, exact);
     return { fx, shifted: r.shifted, real: r.real, swaps: r.swaps, setup: r.setup, value: r.value / baseDps };
   };
   // 바꾼 쪽은 사용자가 고르지 않았으면 가장 좋은 무악 세트 조합을 고른다 (켤 세트는 소켓 기준 없이 정확한 값으로 고른다)
   const evaluate = g => afterFor(g, g.avatarSets || bestAvatarChoice(g, names => afterFor(g, names, true).value, ignoreSets));
   /** 효과 묶음을 반영한 스탯창(소켓 교체까지)과 버프 (자동 찾기가 상한 초과를 잴 때 쓴다) */
   const windowOf = (fx, g) => { const r = settle(fx, setupFor(g), g); return { win: r.real, setup: r.setup }; };
-  return { before, evaluate, valueOf, windowOf };
+  return { before, evaluate, valueOf, windowOf, fixedCounted: !!baseAtk };
 }
 
 /**
@@ -487,7 +496,7 @@ export function gearScorer(ctx, beforeGear, { ignoreSets = null } = {}) {
  * 반환: { gain, before, after, delta: 보이는 효과 변화, blank: 스탯창이 비어 반영 못 한 효과, win: 바꾼 뒤 스탯창 }
  */
 export function compareGear(ctx, beforeGear, afterGear) {
-  const { before, evaluate } = gearScorer(ctx, beforeGear);
+  const { before, evaluate, fixedCounted } = gearScorer(ctx, beforeGear);
   const after = evaluate(afterGear);
   return {
     gain: after.value - 1,
@@ -500,5 +509,6 @@ export function compareGear(ctx, beforeGear, afterGear) {
     swaps: after.swaps,
     real: after.real,         // 소켓 교체까지 한 스탯창 (크리·극대 소켓 기준을 켰을 때)
     setup: after.setup,       // 바꾼 뒤 버프 (마을 버프를 바꿨으면 그 버프)
+    fixedCounted,             // 고정 공격력을 계산에 넣었는지 (무기 공격력 칸이 있어야 넣는다)
   };
 }

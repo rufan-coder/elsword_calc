@@ -1,9 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { compareGear, gearEffects, atmaSet, emptyGear, gearScorer } from "../js/calc/gear.js";
-import { resolve, dpsIndex } from "../js/calc/stats.js";
+import { resolve, dpsIndex, baseAttack, maxiMult, maxiFinal } from "../js/calc/stats.js";
 import { applyOption } from "../js/calc/compare.js";
 import { near, PICARO } from "./helpers.js";
+import { ARMOR_BASE_ATTACK, ENHANCE_MULT } from "../js/data/equipment.js";
 
 const ctx = { win: { ...PICARO.win, boss: 1.9, adapt: 0.59, super_adapt: 0.1, cdr_gang: 0.32, cdr_cho: 0.32 }, job: PICARO.job, resist: PICARO.resist, setup: { ...PICARO.setup, debuff: 0.95 } };
 const gear = (patch = {}) => Object.assign(emptyGear(), patch);
@@ -20,6 +21,23 @@ test("장비 교체: 크리 10% 악세를 빼면 옵션 비교의 크리 -10%와
   const base = resolve(ctx.win, ctx.job, ctx.resist, ctx.setup);
   near(r.gain, dpsIndex(applyOption(base, { crit_stat: -0.10 })) / dpsIndex(base) - 1, 10);   // 적응력 2%는 두 악세가 같다
   assert.deepEqual(Object.keys(r.ignored), ["aspd"]);                                          // 동작 속도는 계산에서 빠진다
+});
+
+test("고정 공격력: 시트처럼 스탯창 공격력에서 되돌린 기본 공격력에 더한다", () => {
+  near(baseAttack({ A: 170165, A_max: 233065, W: 56380.4 }), 66316.24225, 1);   // 시트 ver.3.0.22 C409 관측에서 복원한 기본 공격력
+  // 악령 감옥(고정 30) -> 마지카 리브리(고정 20, 동속은 계산 안 함): 고정 공격력만 -10
+  const before = gear({ avatar: { support: "녹스 웨나토르 : 악령 감옥" } }), after = gear({ avatar: { support: "플로스 마지카 : 마지카 리브리" } });
+  const r = compareGear(ctx, before, after);
+  const s = resolve(ctx.win, ctx.job, ctx.resist, ctx.setup), M = maxiFinal(s);
+  near(r.gain, maxiMult(M, s.A, s.A_max, -10 / baseAttack(ctx.win)) / maxiMult(M, s.A, s.A_max) - 1, 10);
+  assert.ok(r.gain < 0 && r.fixedCounted);
+  // 방어구: 상의 강화 11 -> 12강이면 부위 기본 공격력(1티어 상의 290) x (2.95 - 2.55) = 116 만큼 고정 공격력이 오른다
+  const top = enh => gear({ equip: { top: { type: "엑사스케일", enh, ref: 0, sijum: [] }, set: null } });
+  near(gearEffects(top(12), "마법", null, null, null, 1).fixedAtk - gearEffects(top(11), "마법", null, null, null, 1).fixedAtk, 290 * (2.95 - 2.55), 9);
+  // 무기 공격력이 없으면 스탯형 공격력을 몰라서 고정 공격력은 세지 않는다
+  const noW = compareGear({ ...ctx, win: { ...ctx.win, W: undefined } }, before, after);
+  near(noW.gain, 0, 12);
+  assert.equal(noW.fixedCounted, false);
 });
 
 test("장비 교체: 최종 데미지와 곱연 크뎀은 스탯창과 따로 곱한다", () => {
@@ -148,7 +166,10 @@ test("방어구: 하의·신발 강화가 바뀌면 버프 세팅의 하의 크�
   const base = resolve(ctx.win, ctx.job, ctx.resist, ctx.setup);
   const r = compareGear(ctx, one("bottom", 12), one("bottom", 13));   // 12강·13강은 강화 효과(보뎀·초적응)가 같다
   const s2 = { ...ctx.setup, crit_mults: [ctx.setup.crit_mults[0] + 0.01, ...ctx.setup.crit_mults.slice(1)] };
-  near(r.gain, dpsIndex(resolve(ctx.win, ctx.job, ctx.resist, s2)) / dpsIndex(base) - 1, 10);
+  // 하의 고정 공격력도 부위 기본 공격력 x (13강 배율 - 12강 배율) 만큼 오른다
+  const after = resolve(ctx.win, ctx.job, ctx.resist, s2);
+  after.fixed_atk_ratio = ARMOR_BASE_ATTACK[ctx.job.tier].bottom * (ENHANCE_MULT[13] - ENHANCE_MULT[12]) / baseAttack(ctx.win);
+  near(r.gain, dpsIndex(after) / dpsIndex(base) - 1, 10);
   near(r.setup.crit_mults[0], ctx.setup.crit_mults[0] + 0.01, 12);
   const m = compareGear(ctx, one("shoes", 12), one("shoes", 9));
   near(m.setup.maxi_mults[0], ctx.setup.maxi_mults[0] - 0.03, 12);

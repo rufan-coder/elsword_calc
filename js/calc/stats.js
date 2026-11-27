@@ -10,7 +10,7 @@
 //             debuff }   debuff 는 던전의 마계 디버프 (화면에서 고른 던전 값을 넣는다)
 
 import { critFromStat, statFromCrit, maxiFromStat, statFromMaxi } from "./diminish.js";
-import { ENCOURAGE } from "../data/buffs.js";
+import { ENCOURAGE, PASSIVE_ATTACK } from "../data/buffs.js";
 import { ADAPT_CAP } from "../data/rules.js";
 
 export const prod = xs => xs.reduce((a, x) => a * (1 + x), 1);   // Π(1 + x)
@@ -67,9 +67,16 @@ export function maxiFinal(s) {
 /**
  * 극대화로 평균 공격력이 늘어나는 배율.
  * 원래 식은 1 + 0.55·M·W·(1+Ps)/A 이고 Ps = 2(Amax-A)/(1.1W) - 1 이라, 무기 공격력 W가 약분돼 1 + M·(Amax-A)/A 가 된다.
+ * fixed: 고정 공격력 변화 ÷ 기본 공격력 (baseAttack). 고정 공격력은 기본 공격력에 더해져 공격력만 올리고 극대화 범위(무기 공격력 몫)는 그대로라
+ *        (기본 + 고정)·(1+스탯형)·(1+패시브형) + M·범위 를 A 로 나누면 1 + fixed + M·(Amax-A)/A 가 된다 (시트 C413·C416·C424)
  */
-export function maxiMult(M, A, Amax) {
-  return 1 + M * Math.max(0, Amax - A) / A;
+export function maxiMult(M, A, Amax, fixed = 0) {
+  return 1 + fixed + M * Math.max(0, Amax - A) / A;
+}
+
+/** 스탯창 공격력에서 되돌린 기본 공격력 = A ÷ (1 + 스탯형 공격력) ÷ (1 + 패시브형 공격력). 무기 공격력이 없어 스탯형을 모르면 null */
+export function baseAttack(win) {
+  return hasAtkPct(win) ? win.A / ((1 + statAtkPct(win.A, win.A_max, win.W)) * (1 + PASSIVE_ATTACK)) : null;
 }
 
 /** 스텟형 물리/마법 공격력 % = 극대화 구간 길이 2(Amax-A) ÷ 무기 구간 길이 1.1W - 1 */
@@ -153,7 +160,9 @@ export function dpsIndex(s) {
     x *= Rc * (1 + c) + Rg * (1 + g);
   }
   if (hasCrit(s)) x *= critMult(s);
-  if (hasMaxi(s)) x *= maxiMult(maxiFinal(s), s.A, s.A_max);
+  // 고정 공격력 변화(악세 교체 등, fixed_atk_ratio = 변화 ÷ 기본 공격력)는 극대화 배율 안에서 같이 센다
+  if (hasMaxi(s)) x *= maxiMult(maxiFinal(s), s.A, s.A_max, s.fixed_atk_ratio || 0);
+  else if (s.fixed_atk_ratio) x *= 1 + s.fixed_atk_ratio;
   x *= hpMultiplier(s.hp_over || 0, s.hp_under || 0, s.hp3_over, s.hp3_under);
   if (has(s, "adapt")) x *= adaptMult(s);
   // 스킬 재사용 시간 감소(cdr_gang, cdr_cho)는 DPS에 넣지 않는다 (js/data/rules.js 의 CDR_CAP 참고)

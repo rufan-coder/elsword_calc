@@ -138,7 +138,7 @@ function equipTable() {
     `<p class="hint">네블론에는 시줌이 없어요. 네블론을 고르면 시줌 자리에 옵션 변환 3줄과 카트리지를 넣는 칸이 생겨요. 옵션 변환 수치는 합연으로 더하고, "강화당" 옵션은 그 부위 강화 수치를 곱해요. DPS에 안 들어가는 옵션은 "옵변 없음·그 밖"으로 두세요.</p>` +
     `<p class="hint">카트리지는 같은 종류면 가장 높은 레벨 하나만 세요. 스탯창에 보이는 효과(배틀·클래식·뮤테이션)와 오버플로우 최종 데미지를 넣고, 서포트1·2는 서포터만 효과가 있어서 효과는 빼고 글리터의 훈장 개수에만 넣어요. 네블론이 있는 쪽은 글리터의 훈장도 그 카트리지로 계산해요 (곱연 크뎀은 배틀·클래식 개수, 최종 데미지는 하이퍼·서포트 개수).</p>` +
     `<p class="hint">네블론은 부위마다 소켓이 1칸 더 있어요. 네블론 부위 수가 바뀌면 늘어난 칸에 크리 6%·극대 6%·"소켓 교체 기준" 마법석 중 DPS가 가장 높은 것을 끼워서 계산해요 (줄면 손해가 가장 적은 것을 빼요).</p>` +
-    `<p class="hint">하의·신발 강화는 버프 세팅의 하의·신발 강화 수치와 같은 칸이에요 (한쪽을 바꾸면 다른 쪽도 바뀌어요). 고정 공격력은 계산하지 않아요. 자동 찾기는 방어구를 바꾸지 않고, "바꿔 보기"의 방어구를 낀 채로 악세를 찾아요.</p>`;
+    `<p class="hint">하의·신발 강화는 버프 세팅의 하의·신발 강화 수치와 같은 칸이에요 (한쪽을 바꾸면 다른 쪽도 바뀌어요). 방어구 고정 공격력(부위 기본 공격력 × 강화 배율 + 재련)은 악세의 물공·마공처럼 기본 공격력에 더해서 계산해요. 자동 찾기는 방어구를 바꾸지 않고, "바꿔 보기"의 방어구를 낀 채로 악세를 찾아요.</p>`;
   return html;
 }
 
@@ -490,7 +490,10 @@ export function renderGear({ win, job, resist, setup, town }) {
   const pm = (k, name) => { const b = lastCtx.setup[k][0], a = r.setup[k][0]; return Math.abs(a - b) > 1e-9 ? `${name} ×${trimPct(b)} → ×${trimPct(a)}` : ""; };
   const partMult = [pm("crit_mults", "하의 크리티컬 곱연산"), pm("maxi_mults", "신발 극대화 곱연산")].filter(Boolean);
   if (partMult.length) notes.push(`방어구 강화가 바뀌어서 ${partMult.join(", ")}(으)로 계산했어요. 그 방어구로 바꿨다면 버프 세팅의 하의·신발 강화도 바뀌어요 (악세 세팅 "지금" 칸을 바꾸면 같이 바뀌어요).`);
-  if (Math.abs((r.after.fixedAtk || 0) - (r.before.fixedAtk || 0)) > 1e-9) notes.push(`방어구 재련 고정 공격력 ${(r.before.fixedAtk || 0).toLocaleString("ko-KR")} → ${(r.after.fixedAtk || 0).toLocaleString("ko-KR")}은 계산에 넣지 않았어요.`);
+  if (Math.abs((r.after.fixedAtk || 0) - (r.before.fixedAtk || 0)) > 1e-9) {
+    const fa = `고정 공격력(악세·아바타 물공/마공, 방어구 강화·재련) ${(r.before.fixedAtk || 0).toLocaleString("ko-KR")} → ${(r.after.fixedAtk || 0).toLocaleString("ko-KR")}`;
+    notes.push(r.fixedCounted ? `${fa}: 기본 공격력에 더해서 계산에 넣었어요.` : `${fa}: 스펙 계산에 무기 공격력이 없어서 계산에 넣지 않았어요.`);
+  }
   const eqMissing = EQUIP_PARTS.filter(p => !eqSel("now", `${p}-type`).value && ![SAME, ""].includes(eqSel("next", `${p}-type`).value)).map(p => PART_NAMES[p]);
   if (eqMissing.length) notes.push(`방어구 ${eqMissing.join("·")}는 "지금" 종류를 넣지 않아서 계산에서 빠졌어요.`);
   const nowCart = equipCartridges(readGear("now").equip);

@@ -61,7 +61,8 @@ export const LOCKABLE = [
 function counted(stats, atkType) {
   const out = {};
   for (const [k, v] of Object.entries(stats || {})) {
-    if (k === "patk" || k === "matk" || IGNORED[k]) continue;
+    if (k === "patk" || k === "matk") { if ((k === "patk") === (atkType !== "마법")) out.fixed_atk = (out.fixed_atk || 0) + v; continue; }   // 고정 공격력
+    if (IGNORED[k]) continue;
     if (k === "patk_pct" || k === "matk_pct") { if ((k === "patk_pct") === (atkType !== "마법")) out.atk_pct = (out.atk_pct || 0) + v; continue; }
     out[k] = (out[k] || 0) + v;
   }
@@ -337,7 +338,7 @@ function searchOne(ctx, now, start, { locked = [], cdrTarget = null, plans: keep
   };
 
   // ----- 1) 스탯별 가치: 지금 상태에서 그 스탯이 1%p 늘면 DPS가 몇 % 느는지 (점감·상한 반영) -----
-  const KEYS = ["crit", "maxi", "crit_dmg", "atk_pct", "boss", "polar", "all_skill", "cho", "gang", "hp_over", "hp_under", "hp100", "add", "adapt", "cd_mult", "final"];
+  const KEYS = ["crit", "maxi", "crit_dmg", "atk_pct", "boss", "polar", "all_skill", "cho", "gang", "hp_over", "hp_under", "hp100", "add", "adapt", "cd_mult", "final", "fixed_atk"];
   const keepEach = Math.ceil(keep / CDR_LAMBDAS.length) + 5;   // 쿨감 가치를 바꿔 가며 뽑을 때 하나당 계획 수
 
   /**
@@ -356,11 +357,13 @@ function searchOne(ctx, now, start, { locked = [], cdrTarget = null, plans: keep
     const fx = scorer.evaluate(g).fx, v0 = scorer.valueOf(fx, g), d = 0.01, w = {};
     const overOf = f => { const x = scorer.windowOf(f, g); return overTotal(x.win, x.setup, ctx.job, ctx.resist); }, o0 = overOf(fx);
     for (const k of KEYS) {
+      const step = k === "fixed_atk" ? 100 : d;   // 고정 공격력은 1당 가치 (100 올려서 잰다)
       const fx1 = k === "cd_mult" ? { ...fx, cdMults: fx.cdMults.concat([d]) }
         : k === "final" ? { ...fx, finals: fx.finals.concat([d]) }
+        : k === "fixed_atk" ? { ...fx, fixedAtk: (fx.fixedAtk || 0) + step }
         : { ...fx, visible: { ...fx.visible, [k]: (fx.visible[k] || 0) + d } };
       // 상한을 넘기는 스탯은 넘치는 만큼 깎는다 (정확한 계산의 value 와 같은 기준)
-      w[k] = (scorer.valueOf(fx1, g) / v0 - 1) / d - OVER_PENALTY * (overOf(fx1) - o0) / d;
+      w[k] = (scorer.valueOf(fx1, g) / v0 - 1) / step - OVER_PENALTY * (overOf(fx1) - o0) / step;
     }
     return w;
   }
