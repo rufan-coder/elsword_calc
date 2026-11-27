@@ -136,6 +136,8 @@ tr.best .bar { background: var(--bar-best); }
 .assume { margin: 12px 0 0; padding-left: 18px; color: var(--muted); font-size: 12.5px; }
 .assume li + li { margin-top: 2px; }
 footer { color: var(--muted); font-size: 12px; margin-top: 22px; }
+.site-footer { margin-top: 28px; padding: 14px 0 4px; border-top: 1px solid var(--line); text-align: center; font-size: 13.5px; }   /* 페이지 맨 아래 문의 */
+.site-footer b { color: var(--fg); font-weight: 700; }
 
 /* 악세 세팅 */
 .gear-tools { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
@@ -207,6 +209,7 @@ table.gear tr.eq-opt td.lbl { color: var(--muted); font-size: 12px; }
   .gear-float b.up { color: var(--best); } .gear-float b.down { color: var(--warn); }
   .gear-float a { margin-left: auto; font-size: 12.5px; }
   #page-gear { padding-bottom: 64px; }
+  body[data-page="gear"] .site-footer { padding-bottom: 72px; }   /* 떠 있는 DPS 변화 칸에 가리지 않게 */
 }
 .gear-gain { display: flex; flex-direction: column; gap: 2px; padding: 12px 14px; border-radius: 8px; background: var(--panel-2); margin-bottom: 12px; }
 .gear-gain .v { font-family: var(--font-display); font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.2; }
