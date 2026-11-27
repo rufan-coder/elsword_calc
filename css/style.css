@@ -142,6 +142,10 @@ button.primary { background: var(--accent); border-color: var(--accent); color: 
 button.primary:hover { filter: brightness(1.08); }
 button:disabled { opacity: .6; cursor: progress; }
 .opt-hint { margin-bottom: 4px; }
+.hint-list { margin: 8px 0 0; padding-left: 18px; color: var(--muted); font-size: 12.5px; line-height: 1.55; }   /* 설명을 한 문장씩 나눠 적는 목록 */
+.hint-list li + li { margin-top: 3px; }
+.hint-list + .hint-list { margin-top: 10px; }
+.hint-list.opt-hint { margin-bottom: 14px; }   /* 아래 장비 표와 띄운다 */
 .cdr-target { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0 0 8px; font-size: 13px; }
 .cdr-target .unit { width: 96px; }
 .aspd-party-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 10px; font-size: 13px; }
