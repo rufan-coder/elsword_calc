@@ -23,6 +23,13 @@ test("적응력: 60%를 넘는 적응력은 버려지고, 초적응력은 그 �
   near(s3, 0.77 / 0.74 - 1, 8);
 });
 
+test("각성 칭호: 압도는 스탯창에 안 보이는 초적응력 3%를 더하고, 다른 칭호는 그대로다", () => {
+  const base = { adapt: 0.60, super_adapt: 0.10 };
+  const at = title => adaptFinal(resolve(base, job, resist, { ...buildSetup({ town: "미사용", title }).setup, debuff: 0.95 }));
+  near(at("압도"), 0.73);
+  for (const t of ["엘리아노드 수호자", "풀려난 그림자", "콘체르토", ""]) near(at(t), 0.70);
+});
+
 test("적응력: 디버프를 다 막았으면 더 올려도 그대로다", () => {
   const s = resolve({ adapt: 0.60, super_adapt: 0.40 }, job, resist, withDebuff(setup, 0.95));
   near(adaptMult(s), 1, 10);

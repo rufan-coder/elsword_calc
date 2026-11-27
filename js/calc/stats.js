@@ -6,7 +6,7 @@
 //             adapt, super_adapt, cdr_gang, cdr_cho }   쿨감(cdr_*)은 DPS에 넣지 않는다
 //   job   : 전직 패시브 (js/data/classes.js 의 한 항목). 없으면 NO_PASSIVE
 //   setup : 스탯창에 안 보이는 버프 묶음 (js/calc/buffs.js 의 buildSetup 결과)
-//           { town_crit, town_maxi, town_adapt, town_boss, crit_mults[], maxi_mults[], cd_base_mults[], item_cd_mults[], guild_boss, enc_uptime,
+//           { town_crit, town_maxi, town_adapt, town_boss, title_super_adapt, crit_mults[], maxi_mults[], cd_base_mults[], item_cd_mults[], guild_boss, enc_uptime,
 //             debuff }   debuff 는 던전의 마계 디버프 (화면에서 고른 던전 값을 넣는다)
 
 import { critFromStat, statFromCrit, maxiFromStat, statFromMaxi } from "./diminish.js";
@@ -129,6 +129,8 @@ export function resolve(win, job, critResist, setup) {
   // 메타모르피의 HP 연동 공격력은 스탯형 공격력 %에 더해진다
   if (has(s, "atk_pct")) s.atk_pct += c.atk_s || 0;
   if (has(s, "adapt")) { s.adapt_add = setup.town_adapt || 0; s.debuff = setup.debuff || 0; }
+  // 각성 칭호(압도)의 초적응력은 스탯창에 안 보여서 여기서 더한다 (초적응력은 60% 상한 밖)
+  if ((has(s, "adapt") || has(s, "super_adapt")) && setup.title_super_adapt) s.super_adapt = (s.super_adapt || 0) + setup.title_super_adapt;
   for (const k of ["gang", "cho"]) if (has(s, k)) s[k] += c[k];
   s.hp3_over = [c.hp_over]; s.hp3_under = [c.hp_under];
   s.hp_crit = [c.hp_crit_over || 0, c.hp_crit_under || 0];

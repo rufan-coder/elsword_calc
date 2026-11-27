@@ -80,9 +80,9 @@ export function renderSummary(ctx) {
   $("cls-extra").hidden = !CLASS_NOTES[cls]; $("cls-extra").textContent = CLASS_NOTES[cls] || "";
 
   // 버프 세팅이 실제로 어떤 수치로 들어갔는지
-  const { town, pants, shoes, yellow, enc, items } = buffs;
+  const { town, title, pants, shoes, yellow, enc, items } = buffs;
   const townParts = [["크리", town.crit], ["극대", town.maxi], ["적응력", town.adapt], ["보뎀", town.boss], ["최종뎀", town.final]].filter(t => t[1]).map(t => `${t[0]} +${trimPct(t[1])}`);
-  $("setup-info").textContent = `적용 값 · 마을 버프 ${townParts.join(" ") || "없음"} · 하의 크확 ×${trimPct(pants)} · 신발 극대 ×${trimPct(shoes)}` + (yellow ? " · 황색 크극 ×8%" : "") +
+  $("setup-info").textContent = `적용 값 · 마을 버프 ${townParts.join(" ") || "없음"}` + (title && title.super_adapt ? ` · ${title.name} 초적응 +${trimPct(title.super_adapt)}` : "") + ` · 하의 크확 ×${trimPct(pants)} · 신발 극대 ×${trimPct(shoes)}` + (yellow ? " · 황색 크극 ×8%" : "") +
     ` · 격려 가동률 ${(enc.uptime * 100).toFixed(1)}% (쿨 ${Math.round(enc.cool)}초, 지속 ${Math.round(enc.dur)}초)` +
     (items || []).filter(x => x.v).map(x => ` · ${x.name} 크뎀 곱연 ×${trimPct(x.v)}`).join("") +   // 최종 데미지만 있는 아이템은 적지 않는다
     ` · 동작 속도 ${setup.aspd_party === false ? "솔로" : "파티"} 기준`;

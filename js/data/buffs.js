@@ -16,6 +16,19 @@ export const TOWN_BUFFS = {
   "미사용": { crit: 0, maxi: 0, adapt: 0, boss: 0 },
 };
 
+/**
+ * 각성 칭호 (스위칭 칭호). 시트 ver.3.0.22 '미표시 효과' 73~77행.
+ *   super_adapt: 스탯창에 안 보이는 초적응력 (압도 3%, 별도 효과라 늘 붙는다)
+ * 각성 중 최종 데미지(엘리아노드 수호자·풀려난 그림자 15%, 콘체르토·압도 20%)는 옵션 비교에 영향이 없어서 넣지 않았다.
+ * 동작 속도 15%는 칭호와 상관없이 ASPD.title 로 센다.
+ */
+export const AWAKEN_TITLES = {
+  "엘리아노드 수호자": {},
+  "풀려난 그림자": {},
+  "콘체르토": {},
+  "압도": { super_adapt: 0.03 },
+};
+
 /** 하의(크리티컬)·신발(극대화) 강화 수치 효과: (2 + 강화 수치)% 곱연산 */
 export const ENHANCE_BASE_PERCENT = 2;
 export const MAX_ENHANCE = 13;

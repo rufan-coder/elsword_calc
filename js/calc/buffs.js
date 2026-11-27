@@ -1,6 +1,6 @@
 // 버프 세팅(마을 버프, 장비 강화, 격려)을 계산에 쓰는 수치로 바꾼다.
 
-import { TOWN_BUFFS, ENHANCE_BASE_PERCENT, YELLOW_ARTIFACT, PARTY_CRIT_DAMAGE, GUILD_BOSS_DAMAGE, ENCOURAGE, BUFF_ITEMS } from "../data/buffs.js";
+import { TOWN_BUFFS, AWAKEN_TITLES, ENHANCE_BASE_PERCENT, YELLOW_ARTIFACT, PARTY_CRIT_DAMAGE, GUILD_BOSS_DAMAGE, ENCOURAGE, BUFF_ITEMS } from "../data/buffs.js";
 import { aspdBuffs, classAspd, hasOwnHeal } from "./aspd.js";
 import { ATMA } from "../data/accessories.js";
 
@@ -44,7 +44,8 @@ export function atmaItems(element) {
 
 /**
  * 화면에서 고른 버프 세팅을 resolve()가 받는 setup으로 만든다.
- * choice: { town, pantsEnhance, shoesEnhance, yellow, stoneCdr, stoneDur, faceTop, ear, battle, party, partyAspd, atma, cls, aspdSkills }
+ * choice: { town, title, pantsEnhance, shoesEnhance, yellow, stoneCdr, stoneDur, faceTop, ear, battle, party, partyAspd, atma, cls, aspdSkills }
+ *   title: 각성 칭호 이름 (AWAKEN_TITLES). 압도는 스탯창에 안 보이는 초적응력 3%가 붙는다
  *   atma : 아트마 세트 속성 ("유수" | "초목" | ""). 유니크 기준. 초목은 기본 크뎀 곱연산(유니크 30%)이 붙고,
  *          유수는 최종 데미지라 스펙 계산에는 영향이 없다 (초목의 크리 -6%는 스탯창에 이미 보인다)
  *   party: 동작 속도 파티 기준이면 true (녹힐 버프와 파티 동속 곱연산을 넣는다. 크뎀 파티 버프와는 상관없음)
@@ -54,6 +55,7 @@ export function atmaItems(element) {
  */
 export function buildSetup(choice) {
   const town = TOWN_BUFFS[choice.town] || { crit: 0, maxi: 0, adapt: 0, boss: 0 };
+  const title = AWAKEN_TITLES[choice.title] || {};
   const yellow = choice.yellow ? YELLOW_ARTIFACT : 0;
   const pants = (ENHANCE_BASE_PERCENT + (choice.pantsEnhance || 0)) / 100;
   const shoes = (ENHANCE_BASE_PERCENT + (choice.shoesEnhance || 0)) / 100;
@@ -62,6 +64,7 @@ export function buildSetup(choice) {
   const aspdClass = choice.cls ? classAspd(choice.cls, choice.aspdSkills || {}) : [];
   const setup = {
     town_crit: town.crit, town_maxi: town.maxi, town_adapt: town.adapt || 0, town_boss: town.boss || 0, town_final: town.final || 0,
+    title_super_adapt: title.super_adapt || 0,   // 각성 칭호(압도)의 초적응력. 스탯창에 안 보여서 따로 더한다
     crit_mults: [pants, yellow], maxi_mults: [shoes, yellow],
     cd_base_mults: [PARTY_CRIT_DAMAGE],
     item_cd_mults: items.map(x => x.v).filter(v => v),   // 버프형 아이템 크뎀 곱연산 (악세 세팅은 장비 쪽에서 따로 세서 뺀다)
@@ -73,5 +76,5 @@ export function buildSetup(choice) {
     aspd_mults: aspdBuffs(choice.faceTop, choice.party !== false, choice.partyAspd == null ? undefined : choice.partyAspd, hasOwnHeal(aspdClass)),   // 동작 속도 곱연산 버프 (격려 제외. DPS에는 안 씀)
     aspd_class: aspdClass,   // 전직 동속 패시브·버프 (곱연·점감 합연·무점감)
   };
-  return { setup, detail: { town, pants, shoes, yellow, enc, items } };
+  return { setup, detail: { town, title: { name: choice.title || "", ...title }, pants, shoes, yellow, enc, items } };
 }

@@ -69,7 +69,7 @@ export function readInputs() {
   $("aspd_party_v").disabled = $("aspd_party").value !== "1";   // 파티 기준일 때만 쓴다
   $("acc_battle").disabled = !(BUFF_ITEMS.ear[$("acc_ear").value] || {}).cd_mult_by_battle;   // 글리터의 훈장일 때만 쓴다
   const { setup, detail } = buildSetup({
-    town: $("town").value,
+    town: $("town").value, title: $("title").value,
     yellow: $("yellow").value === "1",
     pantsEnhance: num("pants") || 0, shoesEnhance: num("shoes") || 0,
     stoneCdr: pctOrZero("enc_cdr"), stoneDur: pctOrZero("enc_dur"),
