@@ -117,7 +117,7 @@ export function renderSummary(ctx) {
   }
   // 양극화: 상한(60%)을 넘었을 때만 보여 준다
   if (over.polar) tiles.push(["양극화", fmt(POLAR_CAP, 1), overText(over.polar, "polar"), "", CAP_NOTES.polar]);
-  // 동작 속도: DPS에는 안 넣는다. 평소/격려 중 실전 값, 격려 중 천장(70%)까지 필요한 스탯창 값
+  // 동작 속도: DPS에는 안 넣는다. 평소/격려 중 실전 값, 최대(70%)가 되는 스탯창 값
   // 파티 동작 속도 칸은 타일 밖(바로 아래)에 둔다: 타일은 입력할 때마다 다시 그려져서 안에 두면 입력 중에 칸이 바뀐다
   $("aspd_party_row").hidden = !has(win, "aspd");
   if (has(win, "aspd")) {
@@ -127,16 +127,16 @@ export function renderSummary(ctx) {
     const seg = `<span class="seg" role="group" aria-label="동작 속도 기준">` +
       [["1", "파티", "녹힐 버프와 파티 동작 속도 포함"], ["0", "솔로", "녹힐 버프·파티 동작 속도 없이"]].map(([v, label, tip]) =>
         `<button type="button" data-aspd-party="${v}" aria-pressed="${(v === "1") === party}" title="${tip}">${label}</button>`).join("") + `</span>`;
-    const line = a.over > 5e-5 ? overText(a.over, "aspd", "스탯창 ") + " (격려 중 천장)"
-      : a.need != null ? `격려 중 천장까지 스탯창 ${trimPct(a.need)}` : "격려 중에도 천장(70%)에 못 닿아요";
+    // 값 아래 줄: 넘은 만큼(빨간 글씨) 옆에 최대가 되는 스탯창 값 (게임 스탯창처럼 121.43%)
+    const max = aspdMaxText(a.need, a.needNormal);
+    const line = a.over > 5e-5 ? `${overText(a.over, "aspd", "스탯창 ")} · ${max}` : max;
     // 켜고 끌 수 있는 전직 패시브·버프 (표의 "선택사항")
     const opts = skills.filter(s => s.toggle);
     const toggles = opts.length ? `<div class="aspd-skills" role="group" aria-label="켜고 끌 수 있는 동속 패시브·버프">` + opts.map(s =>
       `<button type="button" data-aspd-skill="${esc(s.key)}" aria-pressed="${s.on}" title="${esc(aspdSkillTip(s))}">${esc(s.name)} ${aspdSkillValue(s)}</button>`).join("") + `</div>` : "";
     // 합연 패시브(점감·무점감)는 따로 적지 않고 스탯창 값에 마우스를 올리면 보이게 한다. 곱연은 뒤에 따로 적는다
     const dims = on("dim"), statText = dims.length ? `${trimPct(Math.min(win.aspd, ASPD.window_cap))} → ${trimPct(a.stat)}` : trimPct(Math.min(win.aspd, ASPD.window_cap));
-    const statTip = [...on("dim"), ...on("flat")].map(s => `${s.name} ${ASPD_KIND[s.kind]} +${trimPct(s.v)}`)
-      .concat(aspdMaxText(a.need, a.needNormal)).join("\n");
+    const statTip = [...on("dim"), ...on("flat")].map(s => `${s.name} ${ASPD_KIND[s.kind]} +${trimPct(s.v)}`).join("\n");
     tiles.push(["동작 속도 (평소/격려 중)", `${fmt(a.normal, 1)}/${fmt(a.enc, 1)}`, line, "wide",
       "DPS에는 넣지 않아요. 전직 패시브·버프는 정리해 둔 표 기준이고, 아래 버튼은 켜고 끌 수 있는 것이에요.",
       [["스탯창", statText, statTip],

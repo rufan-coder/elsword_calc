@@ -68,7 +68,7 @@ export const ASPD_SKILLS = [
   { classes: one("프라임 오퍼레이터"), name: "G-익스텐션", v: 0.10, kind: "flat", dur: "상시" },
   { classes: AIN, name: "권능:순환모드", v: 0.15, kind: "mult", guess: true, dur: "상시", toggle: true, defaultOn: false, note: "[권능: 순환모드] 상태일 때만 발동" },
   { classes: one("리히터"), name: "중재자", v: 0.10, kind: "mult", dur: "상시", toggle: true, defaultOn: false, note: "[권능: 창조마법] 상태일 때만 발동" },
-  { classes: one("블루헨"), name: "선한 영향력", v: 0.10, kind: "mult", dur: "60초", note: "[에델아이트:빌레] 소모 시 발동" },
+  { classes: one("블루헨"), name: "선한 영향력", v: 0.10, kind: "mult", dur: "60초", note: "녹힐 버프 ([에델아이트:빌레] 소모 시 발동)" },
   { classes: one("헤르셔"), name: "공허의 절대자", v: 0.06, kind: "dim", dur: "상시" },
   { classes: one("비고트"), name: "격분", v: 0.15, kind: "mult", dur: "상시", note: "라우 단계 x 5% (총 15%)" },
   { classes: one("라디언트 소울"), name: "바람이 불어", v: 0.10, kind: "mult", dur: "60초", note: "녹힐 버프" },

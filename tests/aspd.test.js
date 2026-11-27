@@ -1,7 +1,7 @@
 // 동작 속도: 엘리오스 마이너 갤러리 "'동작속도' 스탯에 대한 정보"(2025.09)의 예시와 같은지.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { aspdCalc, aspdBuffs, aspdDim, aspdRaw, classAspd } from "../js/calc/aspd.js";
+import { aspdCalc, aspdBuffs, aspdDim, aspdRaw, classAspd, hasOwnHeal } from "../js/calc/aspd.js";
 import { ASPD_SKILLS } from "../js/data/aspd.js";
 import { CLASS } from "../js/data/classes.js";
 import { buildSetup } from "../js/calc/buffs.js";
@@ -88,6 +88,9 @@ test("전직 동속 데이터: 전직 이름이 맞고, 선택 항목의 처음 
   const firstOn = Object.keys(CLASS).flatMap(c => classAspd(c).filter(s => s.toggle && s.on).map(s => s.key));
   assert.deepEqual(firstOn, ["셀레스티아|월광 - 반월"]);
   assert.equal(classAspd("코드:얼티메이트").find(s => s.name === "여왕의 날개").on, false);
+  // 녹힐 전직: 자기 녹힐 버프가 있으면 파티 녹힐을 또 넣지 않는다
+  const heal = Object.keys(CLASS).filter(c => hasOwnHeal(classAspd(c)));
+  assert.deepEqual(heal.sort(), ["닉스 피에타", "데메르시오", "디우스 아에르", "라디언트 소울", "블루헨", "애버리스", "오버마인드", "일천"].sort());
   // 켜고 끈 것은 전직마다 따로
   const o = { "나이트 엠퍼러|검의 길 (활력의 검사)": true, "나이트 엠퍼러|(체인지)아마겟돈": false };
   assert.deepEqual(classAspd("나이트 엠퍼러", o).map(s => s.on), [true, true, true]);   // 선택 항목이 아닌 것은 끌 수 없다
