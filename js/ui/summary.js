@@ -32,11 +32,19 @@ const overText = (v, k, prefix = "") => `<span class="over" title="${CAP_NOTES[k
 const PARTS_NOTE = "+는 합연산, ×는 곱연산(기본 크뎀 150%에만 곱해요)이에요. 밑줄 친 항목에 마우스를 올리면 어떤 패시브인지 나와요.";
 const plus = x => "+" + trimPct(x), times = x => "×" + trimPct(x);
 const ASPD_NOTE = "×는 곱연산(서로 곱해서 ×1.4까지), +는 점감 합연(스탯창과 같이 점감을 받고 30%까지), 무점감은 70% 천장 뒤에 그대로 더해져요.";
-const ASPD_KIND = { mult: "곱연", dim: "점감 합연", flat: "무점감" };
+const ASPD_KIND = { mult: "곱연", dim: "점감 합연", flat: "무점감 합연" };
 /** 전직 동속 패시브·버프 한 줄의 값 글자: ×10% / +10% / 무점감 +8% */
 const aspdSkillValue = s => (s.kind === "mult" ? "×" : s.kind === "flat" ? "무점감 +" : "+") + trimPct(s.v);
 /** 설명(툴팁). 사실상 상시인 것은 붙이지 않는다 */
 const aspdSkillTip = s => s.always ? "" : [`${ASPD_KIND[s.kind]}${s.guess ? " (정확히 모름, 곱연으로 계산)" : ""}`, s.dur, s.note].filter(Boolean).join(" · ");
+/** 스탯창 동속 (0.2143) -> 게임 스탯창처럼 100 기준 소수 둘째 자리 (121.43%). 필요한 값이라 올림한다 */
+const aspdWinText = x => (Math.ceil((1 + x) * 10000 - 1e-6) / 100).toFixed(2) + "%";
+/** 실전 동속이 최대(70%)가 되는 스탯창 값. need: 격려 중, needNormal: 평소 (못 닿으면 null) */
+function aspdMaxText(need, needNormal) {
+  if (need == null) return `스탯창 ${aspdWinText(ASPD.window_cap)}여도 최대(${trimPct(ASPD.final_cap)})에 못 닿아요`;
+  if (needNormal != null && Math.abs(needNormal - need) < 5e-5) return `스탯창 ${aspdWinText(need)}면 최대`;
+  return `스탯창 ${aspdWinText(need)}면 최대 (격려 중, 평소엔 ${needNormal == null ? `${aspdWinText(ASPD.window_cap)}여도 못 닿아요` : aspdWinText(needNormal)})`;
+}
 /** parts: [이름, 값 글자, 툴팁] 목록. 값이 0인 항목은 미리 빼고 넘긴다 */
 function partsHtml(parts, note = PARTS_NOTE) {
   const items = parts.filter(Boolean).map(([label, value, tip]) => `<span${tip ? ` class="src" title="${esc(tip)}"` : ""}>${label} ${value}</span>`);
@@ -110,6 +118,8 @@ export function renderSummary(ctx) {
   // 양극화: 상한(60%)을 넘었을 때만 보여 준다
   if (over.polar) tiles.push(["양극화", fmt(POLAR_CAP, 1), overText(over.polar, "polar"), "", CAP_NOTES.polar]);
   // 동작 속도: DPS에는 안 넣는다. 평소/격려 중 실전 값, 격려 중 천장(70%)까지 필요한 스탯창 값
+  // 파티 동작 속도 칸은 타일 밖(바로 아래)에 둔다: 타일은 입력할 때마다 다시 그려져서 안에 두면 입력 중에 칸이 바뀐다
+  $("aspd_party_row").hidden = !has(win, "aspd");
   if (has(win, "aspd")) {
     const skills = setup.aspd_class || [], on = k => skills.filter(s => s.on && s.kind === k);
     const mults = (setup.aspd_mults || []).concat(on("mult")), party = setup.aspd_party !== false;
@@ -123,16 +133,16 @@ export function renderSummary(ctx) {
     const opts = skills.filter(s => s.toggle);
     const toggles = opts.length ? `<div class="aspd-skills" role="group" aria-label="켜고 끌 수 있는 동속 패시브·버프">` + opts.map(s =>
       `<button type="button" data-aspd-skill="${esc(s.key)}" aria-pressed="${s.on}" title="${esc(aspdSkillTip(s))}">${esc(s.name)} ${aspdSkillValue(s)}</button>`).join("") + `</div>` : "";
-    // 점감 합연 패시브는 따로 적지 않고 스탯창 값에 마우스를 올리면 보이게 한다
+    // 합연 패시브(점감·무점감)는 따로 적지 않고 스탯창 값에 마우스를 올리면 보이게 한다. 곱연은 뒤에 따로 적는다
     const dims = on("dim"), statText = dims.length ? `${trimPct(Math.min(win.aspd, ASPD.window_cap))} → ${trimPct(a.stat)}` : trimPct(Math.min(win.aspd, ASPD.window_cap));
-    const statTip = dims.length ? `점감 합연 ${dims.map(s => `${s.name} +${trimPct(s.v)}`).join(", ")}를 더하고 다시 점감을 건 값이에요 (30%까지).` : "";
+    const statTip = [...on("dim"), ...on("flat")].map(s => `${s.name} ${ASPD_KIND[s.kind]} +${trimPct(s.v)}`)
+      .concat(aspdMaxText(a.need, a.needNormal)).join("\n");
     tiles.push(["동작 속도 (평소/격려 중)", `${fmt(a.normal, 1)}/${fmt(a.enc, 1)}`, line, "wide",
       "DPS에는 넣지 않아요. 전직 패시브·버프는 정리해 둔 표 기준이고, 아래 버튼은 켜고 끌 수 있는 것이에요.",
       [["스탯창", statText, statTip],
         ...(setup.aspd_mults || []).map(x => [x.name, times(x.v)]),
-        ...on("mult").map(s => [s.name, times(s.v), aspdSkillTip(s)]),
-        ["격려", times(ASPD.encourage) + " (격려 중)"],
-        ...on("flat").map(s => [s.name, aspdSkillValue(s), aspdSkillTip(s)])], ASPD_NOTE, seg, toggles]);
+        ...on("mult").map(s => [s.name, times(s.v)]),   // 전직 곱연 패시브는 설명(밑줄) 없이 적는다. 켜고 끄는 것은 아래 버튼에 설명이 있다
+        ["격려", times(ASPD.encourage) + " (격려 중)"]], ASPD_NOTE, seg, toggles]);
   }
   // 초목: 크뎀 곱연산 30%를 얻고 보뎀 한 칸을 뺐을 때. "사냥석 뺀 기준/힘트마 뺀 기준"
   const chomok = (setup.item_cd || []).some(x => x.slot === "atma" && x.name === "초목의 아트마") ? null : chomokGain(win, job, resist, setup);   // 이미 초목이면 안 보여 준다

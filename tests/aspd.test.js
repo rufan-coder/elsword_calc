@@ -84,6 +84,10 @@ test("전직 동속 데이터: 전직 이름이 맞고, 선택 항목의 처음 
   assert.equal(classAspd("리버레이터").find(s => s.name === "월광 - 반월").on, false);
   assert.equal(classAspd("니샤 라비린스").find(s => s.name === "이제 깰 시간이야").on, false);
   assert.equal(classAspd("페이탈 팬텀").find(s => s.name === "샤프슈터 신드롬").toggle, true);
+  // 선택 항목은 상시 유지가 힘든 것이라 처음엔 다 꺼져 있다 (셀레스티아의 월광 - 반월만 예외)
+  const firstOn = Object.keys(CLASS).flatMap(c => classAspd(c).filter(s => s.toggle && s.on).map(s => s.key));
+  assert.deepEqual(firstOn, ["셀레스티아|월광 - 반월"]);
+  assert.equal(classAspd("코드:얼티메이트").find(s => s.name === "여왕의 날개").on, false);
   // 켜고 끈 것은 전직마다 따로
   const o = { "나이트 엠퍼러|검의 길 (활력의 검사)": true, "나이트 엠퍼러|(체인지)아마겟돈": false };
   assert.deepEqual(classAspd("나이트 엠퍼러", o).map(s => s.on), [true, true, true]);   // 선택 항목이 아닌 것은 끌 수 없다
