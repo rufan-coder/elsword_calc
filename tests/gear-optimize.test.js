@@ -5,7 +5,7 @@ import { gearScorer, gearEffects, emptyGear, compareGear } from "../js/calc/gear
 import { buildSetup } from "../js/calc/buffs.js";
 import { resolve } from "../js/calc/stats.js";
 import { capOver } from "../js/calc/caps.js";
-import { ACCESSORIES, WEAPON_AVATARS, OPTIMIZE_SKIP_SETS } from "../js/data/accessories.js";
+import { ACCESSORIES, WEAPON_AVATARS, OPTIMIZE_SKIP_SETS, OPTIMIZE_SKIP_ITEMS } from "../js/data/accessories.js";
 import { CLASS } from "../js/data/classes.js";
 import { near, PICARO } from "./helpers.js";
 
@@ -35,6 +35,17 @@ test("자동 찾기: 오래된 세트는 5셋으로 고르지 않고, 무악 세
   // 찾는 동안에는 오래된 세트 효과를 세지 않는다: 오래된 무악 세트가 켜져 있으면 그건 우연히 모인 것이라 그 세트를 빼도 손해가 없어야 한다
   const active = gearEffects(r.gear, ctx.job.type).sets.filter(s => s.active && OPTIMIZE_SKIP_SETS.has(s.name));
   assert.equal(active.length, 0);
+});
+
+test("자동 찾기: 구하기 힘든 아이템(블러디 나이트메어 무기)은 추천하지 않고, 지금 끼고 있으면 그대로 둘 수 있다", () => {
+  // 양극화가 상한이고 추피·모스뎀이 높아서 무기 아바타는 HP100 5% 쪽이 좋은 캐릭터: 블러디 나이트메어 무기(물마공 250)가 가장 좋다
+  const c = { ...ctx, win: { ...ctx.win, polar: 0.6, add: 2.0, all_skill: 2.0 } };
+  const locked = LOCKABLE.filter(k => k !== "wavatar"), plain = Object.assign(emptyGear(), { weapon: "사룡무" });
+  assert.ok(OPTIMIZE_SKIP_ITEMS.has("블러디 나이트메어 무기"));
+  const r = optimizeGear(c, plain, { locked });
+  assert.ok(r.gear.wavatar && !OPTIMIZE_SKIP_ITEMS.has(r.gear.wavatar));
+  const worn = Object.assign(emptyGear(), { weapon: "사룡무", wavatar: "블러디 나이트메어 무기" });
+  assert.equal(optimizeGear(c, worn, { locked }).gear.wavatar, "블러디 나이트메어 무기");   // 이미 낀 것이 가장 좋으면 그대로
 });
 
 test("자동 찾기: 고정한 칸은 지금 것 그대로 둔다", () => {

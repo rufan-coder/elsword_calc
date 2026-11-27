@@ -30,7 +30,7 @@
 //   - 무기 종류는 바꾸지 않는다
 //   - 오래된 세트(OPTIMIZE_SKIP_SETS)는 세트로 맞추려고 하지 않는다. 아이템은 낱개로 고를 수 있고, 우연히 같은 세트가 모이면 그 효과는 계산에 들어간다
 
-import { ACCESSORIES, ACC_SLOTS, WEAPON_AVATARS, OUTFITS, ARMOR_AVATARS, SETS, ATMA, AVATAR_SET_LIMIT, OPTIMIZE_SKIP_SETS } from "../data/accessories.js";
+import { ACCESSORIES, ACC_SLOTS, WEAPON_AVATARS, OUTFITS, ARMOR_AVATARS, SETS, ATMA, AVATAR_SET_LIMIT, OPTIMIZE_SKIP_SETS, OPTIMIZE_SKIP_ITEMS } from "../data/accessories.js";
 import { gearScorer, gearEffects, countSets, IGNORED, itemStats } from "./gear.js";
 import { TOWN_BUFFS } from "../data/buffs.js";
 import { capOver } from "./caps.js";
@@ -90,20 +90,21 @@ const prune = list => list.filter((b, i) => !list.some((a, j) => j !== i && domi
 // ----- 칸 (변수) -----
 // group: "avatar" (아바타 악세 + 무기 아바타) | "normal" (일반 악세) | "wear" (한 벌, 5셋) | "element" (아트마 속성)
 
-function variables(atkType, battle) {
-  const vars = [];
+/** owned: 지금 끼고 있는 아이템 이름. 추천하지 않는 아이템(OPTIMIZE_SKIP_ITEMS)도 지금 낀 것이면 후보에 남긴다 */
+function variables(atkType, battle, owned = new Set()) {
+  const vars = [], allowed = name => !OPTIMIZE_SKIP_ITEMS.has(name) || owned.has(name);
   for (const layer of ["avatar", "normal"]) {
     for (const key of ACC_SLOTS.map(s => s.key).concat(layer === "normal" ? ["ring2"] : [])) {
       const slot = key === "ring2" ? "ring" : key;
-      const items = ACCESSORIES.filter(a => a.layer === layer && a.slot === slot && !a.unknown && (Object.keys(a.stats).length || a.atma || a.set !== "없음"))
+      const items = ACCESSORIES.filter(a => a.layer === layer && a.slot === slot && !a.unknown && (Object.keys(a.stats).length || a.atma || a.set !== "없음") && allowed(a.name))
         .map(a => ({ name: a.name, set: a.set, atma: !!a.atma, c: counted(itemStats(a, battle), atkType) }));   // 글리터의 훈장 곱연 크뎀은 카트리지 개수대로
       const cands = prune(typeFirst(atkType, items));
       vars.push({ key: `${layer}.${key}`, group: layer, layer, slot: key, cands, values: cands.map(x => x.name), get: g => g[layer][key] || null, set: (g, v) => { g[layer][key] = v; } });
     }
   }
-  const wav = WEAPON_AVATARS.map(w => ({ name: w.name, set: w.set, atma: false, c: counted(w.stats, atkType) }));
+  const wav = WEAPON_AVATARS.filter(w => allowed(w.name)).map(w => ({ name: w.name, set: w.set, atma: false, c: counted(w.stats, atkType) }));
   vars.push({ key: "wavatar", group: "avatar", cands: wav, values: wav.map(w => w.name), get: g => g.wavatar || null, set: (g, v) => { g.wavatar = v; } });
-  const outfits = prune(OUTFITS.map(o => ({ name: o.name, set: "없음", atma: false, c: counted(o.stats, atkType) })));
+  const outfits = prune(OUTFITS.filter(o => allowed(o.name)).map(o => ({ name: o.name, set: "없음", atma: false, c: counted(o.stats, atkType) })));
   vars.push({ key: "outfit", group: "wear", cands: outfits, values: outfits.map(o => o.name), get: g => g.outfit || null, set: (g, v) => { g.outfit = v; } });
   vars.push({ key: "armor", group: "wear", values: Object.keys(ARMOR_AVATARS).filter(n => !OPTIMIZE_SKIP_SETS.has(n)), get: g => g.armor.hair || null, set: (g, v) => { for (const p of ARMOR_PIECES) g.armor[p] = v; } });
   vars.push({ key: "element", group: "element", values: ATMA_ELEMENTS, get: g => g.atma.element, set: (g, v) => { g.atma.element = v; } });
@@ -321,7 +322,8 @@ function searchOne(ctx, now, start, { locked = [], cdrTarget = null, plans: keep
   const value = g => { const j = judge(g); return j.dps - CDR_PENALTY * j.short - OVER_PENALTY * j.over; };
   const lock = new Set(locked);
   // 정령석은 지금 낀 것을 입력했을 때만 바꿔 본다 (모르면 스탯창에서 빼 줄 수가 없다)
-  const all = variables(atkType, ctx.setup.glitter_battle), vars = all.filter(v => !lock.has(v.key) && !(v.key === "spirit" && now.spirit == null));
+  const owned = new Set([...Object.values(now.avatar), ...Object.values(now.normal), now.wavatar, now.outfit].filter(Boolean));
+  const all = variables(atkType, ctx.setup.glitter_battle, owned), vars = all.filter(v => !lock.has(v.key) && !(v.key === "spirit" && now.spirit == null));
   const byKey = new Map(all.map(v => [v.key, v]));
   const elementVar = vars.find(v => v.key === "element");
   /** 속성 후보. 지금 속성을 맨 앞에 둬서, 효과가 같은 속성(유수·화염)끼리는 괜히 바꾸라고 하지 않게 한다 */
