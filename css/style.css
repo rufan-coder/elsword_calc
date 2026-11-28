@@ -27,7 +27,9 @@ header.top { display: flex; flex-wrap: wrap; align-items: center; justify-conten
 .page[hidden] { display: none; }
 a { color: var(--accent); }
 h1 { font-family: var(--font-display); font-size: 24px; font-weight: 700; margin: 0; text-wrap: balance; }
-h1 .credit { font-family: var(--font-body); font-size: 12px; font-weight: 400; color: var(--muted); margin-left: 6px; white-space: nowrap; }   /* 제목 옆 만든 사람 */
+h1 .credit { display: inline-block; font-family: var(--font-body); font-size: 12px; font-weight: 400; color: var(--muted); margin-left: 6px; white-space: nowrap; }   /* 제목 옆 만든 사람·문의 (자리가 모자라면 통째로 다음 줄로) */
+h1 .credit b { color: var(--fg); font-weight: 600; }
+h1 .name { white-space: nowrap; }   /* 제목은 한 줄로 두고, 좁으면 옆의 작은 글씨만 다음 줄로 */
 .ver { color: var(--muted); font-size: 12.5px; }
 .cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); gap: 20px; align-items: start; }
 .col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
